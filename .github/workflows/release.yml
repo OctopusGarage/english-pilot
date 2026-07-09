@@ -38,7 +38,7 @@ jobs:
           npm ci
           npm run verify
           mkdir -p dist-release
-          PACKED="$(npm pack --pack-destination dist-release)"
+          PACKED="$(npm pack --pack-destination dist-release --silent | tail -n 1)"
           mv "dist-release/${PACKED}" "dist-release/english-pilot-${GITHUB_REF_NAME}.tgz"
 
       - name: Create GitHub Release
