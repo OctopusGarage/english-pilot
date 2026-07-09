@@ -1,5 +1,5 @@
 {
-  "name": "english-pilot",
+  "name": "@octopusgarage/english-pilot",
   "version": "0.1.0",
   "license": "MIT",
   "description": "English-dominant conversation gate, coaching assistant, and review system for AI workflows.",

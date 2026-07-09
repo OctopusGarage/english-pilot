@@ -26,7 +26,7 @@ curl -fsSL https://raw.githubusercontent.com/OctopusGarage/english-pilot/main/in
 Npm install after publishing:
 
 ```bash
-npm install -g english-pilot
+npm install -g @octopusgarage/english-pilot
 english-pilot setup --yes
 ```
 

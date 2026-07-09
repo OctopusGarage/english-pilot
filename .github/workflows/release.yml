@@ -78,7 +78,7 @@ jobs:
             echo "Or install from npm after the npm publish workflow has run:"
             echo
             echo '```bash'
-            echo "npm install -g english-pilot"
+            echo "npm install -g @octopusgarage/english-pilot"
             echo "english-pilot setup --yes"
             echo '```'
             echo

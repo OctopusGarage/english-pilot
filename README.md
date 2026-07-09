@@ -8,7 +8,7 @@
 [![CodeQL](https://github.com/OctopusGarage/english-pilot/actions/workflows/codeql.yml/badge.svg)](https://github.com/OctopusGarage/english-pilot/actions/workflows/codeql.yml)
 [![Coverage](badges/coverage.svg)](badges/coverage.svg)
 [![version](https://img.shields.io/github/package-json/v/OctopusGarage/english-pilot)](https://github.com/OctopusGarage/english-pilot/releases/latest)
-[![npm](https://img.shields.io/npm/v/english-pilot?logo=npm)](https://www.npmjs.com/package/english-pilot)
+[![npm](https://img.shields.io/npm/v/@octopusgarage/english-pilot?logo=npm)](https://www.npmjs.com/package/@octopusgarage/english-pilot)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.5-brightgreen)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -154,7 +154,7 @@ curl -fsSL https://raw.githubusercontent.com/OctopusGarage/english-pilot/main/in
 Or use npm after the package is published:
 
 ```bash
-npm install -g english-pilot
+npm install -g @octopusgarage/english-pilot
 english-pilot setup --yes
 ```
 
