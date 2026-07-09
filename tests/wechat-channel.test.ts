@@ -88,6 +88,7 @@ describe('WeChat long-connection channel', () => {
   });
 
   it('routes allowed WeChat messages to the configured external agent backend', async () => {
+    runCli(['config', 'use', 'force']);
     runCli(['config', 'set', 'externalAgentBackend', 'codex']);
     const sent: string[] = [];
     const prompts: string[] = [];
@@ -115,7 +116,7 @@ describe('WeChat long-connection channel', () => {
           {
             type: 1,
             text_item: {
-              text: 'Please help me reply to this customer.',
+              text: 'what is the weather about 广州',
             },
           },
         ],
@@ -143,7 +144,11 @@ describe('WeChat long-connection channel', () => {
 
     expect(result).toMatchObject({ handled: true, replied: true });
     expect(prompts[0]).toContain('"channel":"wechat"');
-    expect(prompts[0]).toContain('Please help me reply to this customer.');
+    expect(prompts[0]).toContain('what is the weather about 广州');
+    expect(prompts[0]).toContain('<english_pilot_coaching>');
+    expect(prompts[0]).toContain('Required: after the main reply');
+    expect(prompts[0]).toContain('English note:');
+    expect(prompts[0]).toContain('Do not omit it.');
     expect(sent).toEqual(['Here is a concise reply.']);
   });
 

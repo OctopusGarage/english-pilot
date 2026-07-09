@@ -85,6 +85,9 @@ export function helpText(): string {
     '  english-pilot roadmap [--target feishu|wechat|cloud-stt] [--write] [--dir <path>] [--json]',
     '  english-pilot roadmap next [--target feishu|wechat|cloud-stt] [--write] [--dir <path>] [--json]',
     '  english-pilot roadmap env-template [--target feishu|wechat|cloud-stt] [--json]',
+    '  english-pilot eval smoke [--json]',
+    '  english-pilot eval prompts',
+    '  english-pilot eval agent --backend claude|codex [--case channel-weather] [--dry-run] [--include-raw] [--json]',
     '',
   ].join('\n');
 }

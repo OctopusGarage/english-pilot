@@ -122,6 +122,7 @@ describe('Feishu long-connection channel', () => {
   });
 
   it('routes allowed Feishu messages to the configured external agent backend', async () => {
+    runCli(['config', 'use', 'force']);
     runCli(['config', 'set', 'externalAgentBackend', 'claude']);
     const sent: Array<{ chatId: string; markdown: string }> = [];
     const prompts: string[] = [];
@@ -144,7 +145,7 @@ describe('Feishu long-connection channel', () => {
       config,
       message: messageFixture({
         senderId: 'ou_allowed',
-        content: 'Please help me rewrite this project update.',
+        content: 'what is the weather about 广州',
       }),
       runAgent: async (options) => {
         prompts.push(options.prompt);
@@ -165,7 +166,11 @@ describe('Feishu long-connection channel', () => {
 
     expect(result).toMatchObject({ handled: true, replied: true });
     expect(prompts[0]).toContain('"channel":"feishu"');
-    expect(prompts[0]).toContain('Please help me rewrite this project update.');
+    expect(prompts[0]).toContain('what is the weather about 广州');
+    expect(prompts[0]).toContain('<english_pilot_coaching>');
+    expect(prompts[0]).toContain('Required: after the main reply');
+    expect(prompts[0]).toContain('English note:');
+    expect(prompts[0]).toContain('Do not omit it.');
     expect(sent).toHaveLength(1);
     expect(sent[0].markdown).toContain('Here is a clearer version.');
   });

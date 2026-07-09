@@ -19,6 +19,7 @@ export interface ExternalChannelTextMonitorResult {
   shouldReply: boolean;
   replyText?: string;
   rewrite?: string;
+  agentCoachingInstruction?: string;
   recorded: boolean;
   item?: LearningItem;
 }
@@ -32,11 +33,13 @@ export function monitorExternalChannelText(input: ExternalChannelTextMonitorInpu
 
   recordPromptEvent(input.source, input.text, analysis, { coachingShown: shouldReply });
   const item = recordChannelLesson(input, assessment);
+  const agentCoachingInstruction = buildAgentCoachingInstruction(input, assessment);
   return {
     decision: analysis.decision,
     shouldReply,
     ...(assessment.rewrite ? { rewrite: assessment.rewrite } : {}),
     ...(shouldReply ? { replyText: buildReplyText(input, analysis.decision, assessment.rewrite) } : {}),
+    ...(agentCoachingInstruction ? { agentCoachingInstruction } : {}),
     recorded: item !== undefined,
     ...(item ? { item } : {}),
   };
@@ -73,6 +76,35 @@ function buildReplyText(
     return ['Try this in English:', '', quote, '', 'I recorded this as a review item when it was useful.'].join('\n');
   }
   return ['English note:', '', quote].join('\n');
+}
+
+function buildAgentCoachingInstruction(
+  input: ExternalChannelTextMonitorInput,
+  assessment: PromptAssessment,
+): string | undefined {
+  if (assessment.analysis.decision === 'BLOCK') return undefined;
+  const shouldCoach =
+    assessment.analysis.decision === 'ALLOW_WITH_COACHING' ||
+    input.replyMode === 'always' ||
+    (assessment.analysis.coachingSignals?.length ?? 0) > 0;
+  if (!shouldCoach) return undefined;
+
+  const ipa = assessment.lesson.ipa
+    .slice(0, 3)
+    .map((entry) => `${entry.word} ${entry.ipa}`)
+    .join('; ');
+
+  return [
+    'Required: after the main reply, append exactly one compact English note. Do not omit it.',
+    'Use this output format:',
+    'English note: "original phrase" -> "more natural English"',
+    'Why: one practical rule',
+    'IPA: key word /IPA/',
+    `English note: "${assessment.lesson.original}" -> "${assessment.lesson.suggested}"`,
+    `Why: ${assessment.lesson.pattern}`,
+    ...(ipa ? [`IPA: ${ipa}`] : []),
+    'Keep the note professional and do not add more than one teaching note.',
+  ].join('\n');
 }
 
 function formatQuote(style: ExternalChannelTextMonitorInput['quoteStyle'], text: string): string {

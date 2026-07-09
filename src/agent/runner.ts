@@ -217,17 +217,42 @@ function shellQuote(value: string): string {
 }
 
 function extractStructuredText(stdout: string): string {
+  const finalResults: string[] = [];
+  const agentMessages: string[] = [];
   const chunks: string[] = [];
   for (const line of stdout.split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!trimmed.startsWith('{')) continue;
     try {
-      collectText(JSON.parse(trimmed) as unknown, chunks);
+      const parsed = JSON.parse(trimmed) as unknown;
+      collectPreferredText(parsed, finalResults, agentMessages);
+      collectText(parsed, chunks);
     } catch {
       // Ignore non-JSON progress lines.
     }
   }
-  return chunks.join('\n').trim();
+  const finalResult = finalResults.at(-1)?.trim();
+  if (finalResult) return finalResult;
+  const agentMessage = agentMessages.at(-1)?.trim();
+  if (agentMessage) return agentMessage;
+  return dedupeAdjacentTextChunks(chunks).join('\n').trim();
+}
+
+function collectPreferredText(value: unknown, finalResults: string[], agentMessages: string[]): void {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+  const record = value as Record<string, unknown>;
+  if (record.type === 'result' && typeof record.result === 'string' && record.result.trim()) {
+    finalResults.push(record.result.trim());
+  }
+  if (isAgentMessageItem(record.item)) {
+    agentMessages.push(record.item.text.trim());
+  }
+}
+
+function isAgentMessageItem(value: unknown): value is { type: 'agent_message'; text: string } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return record.type === 'agent_message' && typeof record.text === 'string' && record.text.trim().length > 0;
 }
 
 function collectText(value: unknown, chunks: string[]): void {
@@ -246,6 +271,15 @@ function collectText(value: unknown, chunks: string[]): void {
   if (typeof record.message === 'object' && record.message) collectText(record.message, chunks);
   if (Array.isArray(record.content)) collectText(record.content, chunks);
   if (typeof record.item === 'object' && record.item) collectText(record.item, chunks);
+}
+
+function dedupeAdjacentTextChunks(chunks: string[]): string[] {
+  const deduped: string[] = [];
+  for (const chunk of chunks) {
+    if (deduped[deduped.length - 1] === chunk) continue;
+    deduped.push(chunk);
+  }
+  return deduped;
 }
 
 function withExtractedConversationIds(result: ExternalAgentRunResult): ExternalAgentRunResult {

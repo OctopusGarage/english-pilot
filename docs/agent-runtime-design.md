@@ -53,6 +53,8 @@ The channel flow should be:
 5. If `externalAgentBackend` is configured, build a structured prompt and call `AgentRunner`.
 6. Reply with the agent output.
 
+When an allowed message is still teachable, the channel runtime passes one coaching instruction into the same agent turn. The local agent should finish the main reply first, then append one compact `English note` with a better expression, a short rationale, and IPA when useful.
+
 ## Backend Configuration
 
 External channel configuration should require an explicit backend:
@@ -128,6 +130,13 @@ External channel prompts should be structured:
 <user_input>
 ...
 </user_input>
+
+<english_pilot_coaching>
+After completing the main reply, append one compact English note for the user.
+English note: "what is the weather about Guangzhou" -> "What is the weather like in Guangzhou?"
+Why: Use "What is the weather like in + place?" when asking about local weather.
+IPA: weather /ˈweðər/
+</english_pilot_coaching>
 ```
 
 This follows the reference bridge pattern from `lark-coding-agent-bridge`: channel metadata and user input are separate sections, and angle brackets inside JSON are escaped before insertion.

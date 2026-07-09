@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildExternalAgentInvocation, runExternalAgent } from '../src/agent/runner.js';
+import { buildExternalAgentInvocation, extractExternalAgentReplyText, runExternalAgent } from '../src/agent/runner.js';
 import { defaultConfig } from '../src/core/policy.js';
 
 describe('external agent runner', () => {
@@ -181,6 +181,65 @@ describe('external agent runner', () => {
       threadId: 'codex-thread-2',
     });
     expect(codex).not.toHaveProperty('sessionId');
+  });
+
+  it('does not duplicate identical Claude assistant and result text from JSONL output', () => {
+    const text = [
+      '**Natural phrasing:**',
+      '',
+      'What is the weather like in Guangzhou?',
+      '',
+      '**English note:** "what is the weather about 广州" -> "What is the weather like in Guangzhou?"',
+      '**Why this is natural:** Use "What is the weather like in + place?" for local weather.',
+      'IPA: weather /ˈweðər/',
+    ].join('\n');
+    const result = extractExternalAgentReplyText({
+      operation: 'external-agent-run',
+      backend: 'claude',
+      command: 'claude',
+      args: ['-p'],
+      cwd: '/tmp/workspace',
+      promptStdin: 'prompt',
+      dryRun: false,
+      exitCode: 0,
+      stdout: [
+        JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text }] } }),
+        JSON.stringify({ type: 'result', result: text }),
+      ].join('\n'),
+      stderr: '',
+    });
+
+    expect(result).toBe(text);
+  });
+
+  it('returns the final Codex agent message instead of progress chatter', () => {
+    const finalText = [
+      'A natural way to ask is: "What is the weather like in Guangzhou?"',
+      '',
+      'English note: "what is the weather about 广州" -> "What is the weather like in Guangzhou?"',
+      'Why: Use "What is the weather like in + place?" when asking about local weather.',
+      'IPA: weather /ˈweðər/',
+    ].join('\n');
+    const result = extractExternalAgentReplyText({
+      operation: 'external-agent-run',
+      backend: 'codex',
+      command: 'codex',
+      args: ['exec'],
+      cwd: '/tmp/workspace',
+      promptStdin: 'prompt',
+      dryRun: false,
+      exitCode: 0,
+      stdout: [
+        JSON.stringify({
+          type: 'item.completed',
+          item: { type: 'agent_message', text: 'I will inspect tools first.' },
+        }),
+        JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: finalText } }),
+      ].join('\n'),
+      stderr: '',
+    });
+
+    expect(result).toBe(finalText);
   });
 });
 

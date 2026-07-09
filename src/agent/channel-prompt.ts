@@ -2,6 +2,7 @@ export interface ExternalChannelAgentPromptInput {
   channel: 'feishu' | 'wechat' | 'cli';
   text: string;
   metadata: Record<string, unknown>;
+  coachingInstruction?: string;
 }
 
 export function buildExternalChannelAgentPrompt(input: ExternalChannelAgentPromptInput): string {
@@ -18,9 +19,12 @@ export function buildExternalChannelAgentPrompt(input: ExternalChannelAgentPromp
     escapeXmlText(input.text),
     '</user_input>',
     '',
+    ...(input.coachingInstruction
+      ? ['<english_pilot_coaching>', escapeXmlText(input.coachingInstruction), '</english_pilot_coaching>', '']
+      : []),
   ].join('\n');
 }
 
 function escapeXmlText(value: string): string {
-  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 }

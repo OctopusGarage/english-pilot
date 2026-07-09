@@ -75,7 +75,7 @@ describe('sendDailyReviewIntegration', () => {
     expect(calls).toEqual([]);
   });
 
-  it('does not call the legacy WeChat provider HTTP path', async () => {
+  it('does not send WeChat daily reviews through a direct network path', async () => {
     const target = findIntegrationTarget('wechat');
     if (!target) throw new Error('missing wechat target');
     const env = {};

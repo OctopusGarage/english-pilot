@@ -3,6 +3,7 @@ import { runAgent, runAgentRunAsync } from './cli-agent.js';
 import { runFeishu, runFeishuAsync, runWeChat, runWeChatAsync } from './cli-channels.js';
 import { runConfig } from './cli-config.js';
 import { runDaemonCommand, runDaemonCommandAsync, runRunCommand } from './cli-daemon.js';
+import { runEval, runEvalAsync } from './cli-eval.js';
 import { runInstall, runUninstall } from './cli-installer.js';
 import { runIntegrationAccountValidate, runIntegrations, runIntegrationSend } from './cli-integrations.js';
 import { runCheck, runCoach, runHook, runPronounce } from './cli-language.js';
@@ -48,6 +49,7 @@ export function runCli(argv: string[], stdin = ''): CliResult {
   if (command === 'doctor') return runDoctor(args);
   if (command === 'status') return runStatus(args);
   if (command === 'roadmap') return runRoadmap(args);
+  if (command === 'eval') return runEval(args);
 
   return {
     exitCode: 1,
@@ -81,6 +83,9 @@ export async function runCliAsync(argv: string[], stdin = '', options: CliAsyncO
   }
   if (command === 'voice' && (args[0] === 'transcribe' || args[0] === 'practice')) {
     return runVoiceAsync(args, options);
+  }
+  if (command === 'eval' && args[0] === 'agent') {
+    return runEvalAsync(args);
   }
   return runCli(argv, stdin);
 }

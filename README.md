@@ -117,7 +117,8 @@ The goal is not to replace English study time. It makes normal work conversation
 **Key points:**
 
 - **One policy, multiple adapters** — hooks, CLI, MCP, Feishu, and WeChat all use the same threshold and coaching pipeline.
-- **External channels are daemon-owned** — Feishu and WeChat run as long connections, not inbound webhook handlers.
+- **External channels are daemon-owned** — Feishu and WeChat run as long connections with daemon-managed lifecycle, reply policy, and session continuity.
+- **Same assessment, controlled delivery** — hooks, CLI, MCP, Feishu, and WeChat share one prompt-assessment pipeline; external channels add deterministic reply modes (`silent`, `violation`, `always`) because the daemon owns the outbound message.
 - **AI work is explicit** — channel messages call a configured local backend (`claude -p` or `codex exec`) only after the language gate allows the message.
 - **Conversation continuity is local** — per-channel Claude session IDs and Codex thread IDs are stored locally and can be reset with `/new`.
 
@@ -180,6 +181,13 @@ Run local diagnostics:
 
 ```bash
 node dist/src/bin/english-pilot.js doctor --json
+```
+
+Run the deterministic local smoke eval:
+
+```bash
+node dist/src/bin/english-pilot.js eval smoke --json
+node dist/src/bin/english-pilot.js eval prompts
 ```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -258,6 +266,17 @@ english-pilot config set externalAgentCwd /path/to/workspace
 
 Local state is stored under `~/.english-pilot` by default. Set `ENGLISH_PILOT_HOME` for tests or isolated runs.
 
+`eval smoke` uses a temporary EnglishPilot home directory, so it does not modify real config, prompt history, or review data. It verifies the language gate, force-mode coaching, Feishu/WeChat coaching prompt injection, and Codex dry-run command construction.
+
+For opt-in AI-backed checks, run:
+
+```bash
+node dist/src/bin/english-pilot.js eval agent --backend codex --case channel-weather --json
+node dist/src/bin/english-pilot.js eval agent --backend claude --case channel-weather --dry-run --json
+```
+
+Non-dry-run agent eval can invoke the real local Claude/Codex process and is intentionally not part of `project-health`.
+
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Development
@@ -267,6 +286,7 @@ npm ci
 npm run lint
 npm run typecheck
 npm test
+npm run smoke
 npm run project-health
 npm run verify
 ```
@@ -276,6 +296,7 @@ Local and CI gates include:
 - ESLint and Prettier
 - TypeScript typecheck
 - Vitest coverage
+- deterministic smoke eval
 - shellcheck for scripts
 - dependency-cruiser
 - knip

@@ -50,6 +50,7 @@ export async function runExternalChannelConversation(
         inputKind: input.inputKind,
         thresholdDecision: 'ALLOW',
       },
+      coachingInstruction: monitorResult.agentCoachingInstruction,
       runAgent: input.runAgent,
       log: input.log,
       failureLabel: `${labelChannel(input.channel)} external agent for ${input.messageLabel}`,

@@ -8,6 +8,7 @@ export interface ExternalChannelAgentTurnInput {
   scope: string;
   text: string;
   metadata: Record<string, unknown>;
+  coachingInstruction?: string;
   runAgent?: typeof runExternalAgent;
   log?: (line: string) => void;
   failureLabel?: string;
@@ -31,6 +32,7 @@ export async function runExternalChannelAgentTurn(
     channel: input.channel,
     text: input.text,
     metadata: input.metadata,
+    coachingInstruction: input.coachingInstruction,
   });
   const result = await (input.runAgent ?? runExternalAgent)({
     config,
