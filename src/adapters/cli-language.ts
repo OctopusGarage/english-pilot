@@ -1,8 +1,7 @@
-import { analyzeText } from '../core/analyze.js';
-import { handleClaudePromptSubmit } from './claude-hook.js';
+import { buildClaudePromptSubmitResponse } from './claude-hook.js';
 import { loadConfig } from '../core/config.js';
 import { buildCoachingContext, type CoachingContext } from '../core/coaching-context.js';
-import { suggestLearningItem, suggestRewrite } from '../core/coach.js';
+import { buildPromptAssessment, type PromptAssessment } from '../core/prompt-assessment.js';
 import { lookupPronunciations } from '../core/pronunciation.js';
 import { extractLesson, type ExtractedLesson } from '../core/lesson.js';
 import { buildMethodTemplateLearningItem, listMethodTemplates, type MethodTemplate } from '../core/method-templates.js';
@@ -24,19 +23,24 @@ export function runCheck(args: string[], stdin: string): CliResult {
   }
 
   const config = loadConfig();
-  const result = analyzeText(text, config, allowedGlossaryTerms());
-  const coachingNote = buildCoachingNote(text, result, config);
-  recordPromptEvent('cli', text, result, { coachingShown: coachingNote !== undefined });
-  maybeRecordLearningItem(text, result, config);
-  const rewrite = result.decision === 'BLOCK' && config.blockWithRewrite ? suggestRewrite(text) : undefined;
+  const assessment = buildPromptAssessment({
+    text,
+    config,
+    allowedTerms: allowedGlossaryTerms(),
+    promptEvents: listPromptEvents(),
+  });
+  recordPromptEvent('cli', text, assessment.analysis, { coachingShown: assessment.coachingNote !== undefined });
+  maybeRecordLearningItem(assessment, config);
   const output = {
-    ...result,
-    ...(rewrite ? { rewrite } : {}),
-    ...(coachingNote ? { coachingNote } : {}),
+    ...assessment.analysis,
+    ...(assessment.rewrite ? { rewrite: assessment.rewrite } : {}),
+    ...(assessment.coachingNote ? { coachingNote: assessment.coachingNote } : {}),
   };
   return {
-    exitCode: result.decision === 'BLOCK' ? 2 : 0,
-    stdout: json ? `${JSON.stringify(output)}\n` : formatHumanResult(result, coachingNote, rewrite),
+    exitCode: assessment.analysis.decision === 'BLOCK' ? 2 : 0,
+    stdout: json
+      ? `${JSON.stringify(output)}\n`
+      : formatHumanResult(assessment.analysis, assessment.coachingNote, assessment.rewrite),
     stderr: '',
   };
 }
@@ -62,13 +66,16 @@ export function runHook(args: string[], stdin: string): CliResult {
     };
   }
 
-  const response = handleClaudePromptSubmit(isRecord(payload) ? payload : {});
   const prompt = isRecord(payload) && typeof payload.prompt === 'string' ? payload.prompt : '';
+  const config = loadConfig();
+  const assessment = prompt.trim()
+    ? buildPromptAssessment({ text: prompt, config, allowedTerms: allowedGlossaryTerms() })
+    : undefined;
+  const response = assessment ? buildClaudePromptSubmitResponse(prompt, config, assessment) : undefined;
   if (prompt.trim()) {
-    const config = loadConfig();
-    const analysis = analyzeText(prompt, config, allowedGlossaryTerms());
-    recordPromptEvent(`${target}-hook`, prompt, analysis);
-    maybeRecordLearningItem(prompt, analysis, config);
+    if (!assessment) throw new Error('Prompt assessment should exist for non-empty hook prompt.');
+    recordPromptEvent(`${target}-hook`, prompt, assessment.analysis);
+    maybeRecordLearningItem(assessment, config);
   }
   return {
     exitCode: 0,
@@ -166,20 +173,10 @@ function allowedGlossaryTerms(): string[] {
     .map((entry) => entry.term);
 }
 
-function maybeRecordLearningItem(text: string, result: AnalysisResult, config: ReturnType<typeof loadConfig>): void {
-  if (result.nonEnglishCount === 0) return;
-  if (!isAutoRecordableLearningPrompt(result)) return;
-  if (result.decision !== 'BLOCK' && !config.recordAllowedPrompts) return;
-  recordLessonIfWorthwhile(extractLesson(text));
-}
-
-function isAutoRecordableLearningPrompt(result: AnalysisResult): boolean {
-  const normalized = result.sanitizedText.trim().replace(/\s+/g, ' ');
-  if (!normalized) return false;
-  if (normalized.length > 180) return false;
-  if ((normalized.match(/\n/g)?.length ?? 0) > 2) return false;
-  if ((normalized.match(/[。！？.!?]/g)?.length ?? 0) > 2) return false;
-  return true;
+function maybeRecordLearningItem(assessment: PromptAssessment, config: ReturnType<typeof loadConfig>): void {
+  if (!assessment.shouldRecordLearningPrompt) return;
+  if (assessment.analysis.decision !== 'BLOCK' && !config.recordAllowedPrompts) return;
+  recordLessonIfWorthwhile(assessment.lesson);
 }
 
 function recordLessonIfWorthwhile(lesson: ExtractedLesson): boolean {
@@ -193,65 +190,6 @@ function recordLessonIfWorthwhile(lesson: ExtractedLesson): boolean {
     ipa: lesson.ipa,
   });
   return true;
-}
-
-function buildCoachingNote(
-  text: string,
-  result: AnalysisResult,
-  config: ReturnType<typeof loadConfig>,
-): string | undefined {
-  if (result.decision !== 'ALLOW_WITH_COACHING') return undefined;
-  if (!isInlineCoachablePrompt(result)) return undefined;
-  if (config.coachingIntensity === 'low') return undefined;
-  const forceCoaching = config.coachingIntensity === 'force';
-  if (!forceCoaching && isInCoachingCooldown(config.coachingCooldownMinutes)) return undefined;
-  if (!forceCoaching && hasReachedDailyCoachingCap(config.maxInlineCoachingPerDay)) return undefined;
-  const suggestion = suggestLearningItem(text);
-  return formatTeachingNote(text, suggestion);
-}
-
-function formatTeachingNote(text: string, suggestion: ReturnType<typeof suggestLearningItem>): string {
-  const ipa = suggestion.ipa
-    .slice(0, 3)
-    .map((entry) => `${entry.word} ${entry.ipa}`)
-    .join('; ');
-  return [
-    `English note: "${text}" -> "${suggestion.suggested}"`,
-    `Why: ${explainRewrite(text, suggestion.suggested)}`,
-    ...(ipa ? [`IPA: ${ipa}`] : []),
-  ].join('\n');
-}
-
-function explainRewrite(original: string, suggested: string): string {
-  if (/\bweather\s+about\b/i.test(original) && /\bweather like in\b/i.test(suggested)) {
-    return 'Use "What is the weather like in + place?" when asking about local weather.';
-  }
-  if (/[\u3400-\u9fff]/.test(original)) {
-    return 'Keep the main request in English and leave only names or hard-to-translate terms in Chinese.';
-  }
-  return 'Prefer a complete natural phrase over word-by-word translation.';
-}
-
-function isInlineCoachablePrompt(result: AnalysisResult): boolean {
-  return isAutoRecordableLearningPrompt(result);
-}
-
-function isInCoachingCooldown(cooldownMinutes: number): boolean {
-  if (cooldownMinutes <= 0) return false;
-  const cutoff = Date.now() - cooldownMinutes * 60 * 1000;
-  return listPromptEvents().some((event) => {
-    if (!event.coachingShown) return false;
-    return new Date(event.createdAt).getTime() >= cutoff;
-  });
-}
-
-function hasReachedDailyCoachingCap(maxInlineCoachingPerDay: number): boolean {
-  if (maxInlineCoachingPerDay <= 0) return true;
-  const today = new Date().toISOString().slice(0, 10);
-  const coachingCount = listPromptEvents().filter((event) => {
-    return event.coachingShown && event.createdAt.slice(0, 10) === today;
-  }).length;
-  return coachingCount >= maxInlineCoachingPerDay;
 }
 
 function formatCoachingContext(context: CoachingContext): string {

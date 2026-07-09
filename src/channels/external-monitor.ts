@@ -1,8 +1,7 @@
 import { analyzeText } from '../core/analyze.js';
-import { suggestRewrite } from '../core/coach.js';
 import { loadConfig } from '../core/config.js';
 import { listGlossaryEntries } from '../core/glossary.js';
-import { extractLesson } from '../core/lesson.js';
+import { buildPromptAssessment, type PromptAssessment } from '../core/prompt-assessment.js';
 import { buildPronunciationBite } from '../core/pronunciation.js';
 import { recordLearningItem, recordPromptEvent, type LearningItem, type PromptEvent } from '../storage/repository.js';
 
@@ -26,18 +25,18 @@ export interface ExternalChannelTextMonitorResult {
 
 export function monitorExternalChannelText(input: ExternalChannelTextMonitorInput): ExternalChannelTextMonitorResult {
   const config = loadConfig();
-  const analysis = analyzeText(input.text, config, allowedGlossaryTerms());
-  const rewrite = analysis.decision === 'BLOCK' && config.blockWithRewrite ? suggestRewrite(input.text) : undefined;
+  const assessment = buildPromptAssessment({ text: input.text, config, allowedTerms: allowedGlossaryTerms() });
+  const analysis = assessment.analysis;
   const shouldReply =
     input.replyMode === 'always' || (input.replyMode === 'violation' && analysis.decision === 'BLOCK');
 
   recordPromptEvent(input.source, input.text, analysis, { coachingShown: shouldReply });
-  const item = recordChannelLesson(input, rewrite);
+  const item = recordChannelLesson(input, assessment);
   return {
     decision: analysis.decision,
     shouldReply,
-    ...(rewrite ? { rewrite } : {}),
-    ...(shouldReply ? { replyText: buildReplyText(input, analysis.decision, rewrite) } : {}),
+    ...(assessment.rewrite ? { rewrite: assessment.rewrite } : {}),
+    ...(shouldReply ? { replyText: buildReplyText(input, analysis.decision, assessment.rewrite) } : {}),
     recorded: item !== undefined,
     ...(item ? { item } : {}),
   };
@@ -45,17 +44,16 @@ export function monitorExternalChannelText(input: ExternalChannelTextMonitorInpu
 
 function recordChannelLesson(
   input: ExternalChannelTextMonitorInput,
-  rewrite: string | undefined,
+  assessment: PromptAssessment,
 ): LearningItem | undefined {
-  const lesson = extractLesson(input.text);
-  if (!lesson.worthRecording && !rewrite) return undefined;
+  if (!assessment.lesson.worthRecording && !assessment.rewrite) return undefined;
   return recordLearningItem({
-    original: lesson.original,
-    suggested: rewrite ?? lesson.suggested,
-    pattern: lesson.pattern,
-    scene: input.replyMode === 'silent' ? lesson.scene : input.coachingScene,
-    tags: [...new Set([...lesson.tags, input.channelTag, 'channel'])],
-    ipa: rewrite ? buildPronunciationBite(rewrite, 8) : lesson.ipa,
+    original: assessment.lesson.original,
+    suggested: assessment.rewrite ?? assessment.lesson.suggested,
+    pattern: assessment.lesson.pattern,
+    scene: input.replyMode === 'silent' ? assessment.lesson.scene : input.coachingScene,
+    tags: [...new Set([...assessment.lesson.tags, input.channelTag, 'channel'])],
+    ipa: assessment.rewrite ? buildPronunciationBite(assessment.rewrite, 8) : assessment.lesson.ipa,
   });
 }
 

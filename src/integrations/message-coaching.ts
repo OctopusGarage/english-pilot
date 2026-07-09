@@ -1,8 +1,7 @@
-import { analyzeText } from '../core/analyze.js';
-import { suggestRewrite } from '../core/coach.js';
 import { loadConfig } from '../core/config.js';
-import { extractLesson, type ExtractedLesson } from '../core/lesson.js';
+import type { ExtractedLesson } from '../core/lesson.js';
 import type { LearningItemDraft } from '../core/learning-card.js';
+import { buildPromptAssessment } from '../core/prompt-assessment.js';
 import type { AnalysisResult } from '../core/types.js';
 import type { IntegrationTarget } from './targets.js';
 
@@ -26,9 +25,8 @@ export function buildIntegrationMessageCoachingPayload(
   text: string,
   allowedTerms: string[] = [],
 ): IntegrationMessageCoachingPayload {
-  const analysis = analyzeText(text, loadConfig(), allowedTerms);
-  const lesson = extractLesson(text);
-  const shouldRecord = lesson.worthRecording;
+  const assessment = buildPromptAssessment({ text, config: loadConfig(), allowedTerms });
+  const shouldRecord = assessment.lesson.worthRecording;
   return {
     target,
     delivery: {
@@ -37,10 +35,10 @@ export function buildIntegrationMessageCoachingPayload(
     },
     message: {
       text,
-      analysis,
-      ...(analysis.decision === 'BLOCK' ? { rewrite: suggestRewrite(text) } : {}),
+      analysis: assessment.analysis,
+      ...(assessment.rewrite ? { rewrite: assessment.rewrite } : {}),
       shouldRecord,
-      ...(shouldRecord ? { lesson } : {}),
+      ...(shouldRecord ? { lesson: assessment.lesson } : {}),
     },
   };
 }

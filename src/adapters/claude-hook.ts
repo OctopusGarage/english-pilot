@@ -1,11 +1,5 @@
-import { analyzeText } from '../core/analyze.js';
-import { loadConfig } from '../core/config.js';
-import { suggestRewrite } from '../core/coach.js';
-import { listGlossaryEntries } from '../core/glossary.js';
-
-export interface ClaudeHookInput {
-  prompt?: string;
-}
+import type { PromptAssessment } from '../core/prompt-assessment.js';
+import type { EnglishPilotConfig } from '../core/types.js';
 
 export interface ClaudeHookBlockResponse {
   decision: 'block';
@@ -14,32 +8,24 @@ export interface ClaudeHookBlockResponse {
 
 export type ClaudeHookResponse = ClaudeHookBlockResponse | undefined;
 
-export function handleClaudePromptSubmit(input: ClaudeHookInput): ClaudeHookResponse {
-  const prompt = input.prompt ?? '';
-  if (!prompt.trim()) return undefined;
+export function buildClaudePromptSubmitResponse(
+  _prompt: string,
+  config: EnglishPilotConfig,
+  assessment: PromptAssessment,
+): ClaudeHookResponse {
+  if (assessment.analysis.decision !== 'BLOCK') return undefined;
 
-  const policy = loadConfig();
-  const result = analyzeText(prompt, policy, allowedGlossaryTerms());
-  if (result.decision !== 'BLOCK') return undefined;
-
-  const actual = Math.round(result.nonEnglishRatio * 100);
-  const allowed = Math.round(policy.maxChineseRatio * 100);
-  const rewrite = policy.blockWithRewrite ? suggestRewrite(prompt) : undefined;
+  const actual = Math.round(assessment.analysis.nonEnglishRatio * 100);
+  const allowed = Math.round(config.maxChineseRatio * 100);
   return {
     decision: 'block',
     reason: [
       `Your message is over the current Chinese ratio limit: ${actual}% > ${allowed}%.`,
       '',
-      ...(rewrite
-        ? ['Please rewrite it in English. Try this copyable version:', '', `"${rewrite}"`, '']
+      ...(assessment.rewrite
+        ? ['Please rewrite it in English. Try this copyable version:', '', `"${assessment.rewrite}"`, '']
         : ['Please rewrite it in English.', '']),
       'Tip: You can keep short Chinese terms when they are hard to translate, but make the main sentence structure English.',
     ].join('\n'),
   };
-}
-
-function allowedGlossaryTerms(): string[] {
-  return listGlossaryEntries()
-    .filter((entry) => entry.allowTerm)
-    .map((entry) => entry.term);
 }
