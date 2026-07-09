@@ -4,18 +4,22 @@ set -eu
 LABEL="com.octopusgarage.english-pilot"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 ROOT="$(cd -- "$(dirname -- "$0")/.." && pwd)"
-NODE_BIN="$(command -v node)"
-CLI_JS="$ROOT/dist/src/bin/english-pilot.js"
+WRAPPER="launchd-wrapper.sh"
 
-if [ ! -f "$CLI_JS" ]; then
-  echo "Build EnglishPilot before installing the service: npm run build" >&2
+if [ "${1:-}" = "--dev" ]; then
+  WRAPPER="dev-launchd-wrapper.sh"
+  echo "Installing EnglishPilot launchd service in dev mode from $ROOT"
+fi
+
+if [ ! -f "$ROOT/scripts/$WRAPPER" ]; then
+  echo "Missing launchd wrapper: $ROOT/scripts/$WRAPPER" >&2
   exit 1
 fi
 
 mkdir -p "$HOME/Library/LaunchAgents" "$HOME/.english-pilot/logs"
 sed \
-  -e "s#__NODE_BIN__#$NODE_BIN#g" \
-  -e "s#__CLI_JS__#$CLI_JS#g" \
+  -e "s#__PROJECT_DIR__#$ROOT#g" \
+  -e "s#__WRAPPER__#$WRAPPER#g" \
   -e "s#__HOME__#$HOME#g" \
   "$ROOT/scripts/english-pilot.plist" > "$PLIST"
 

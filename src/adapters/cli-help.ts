@@ -11,6 +11,7 @@ export function helpText(): string {
     '  english-pilot run [--dry-run] [--json]',
     '  english-pilot daemon status [--json]',
     '  english-pilot service install [--dry-run] [--json]',
+    '  english-pilot service install-dev [--dry-run] [--json]',
     '  english-pilot service uninstall|status|restart|logs|pause|resume',
     '  english-pilot config get',
     '  english-pilot config profiles [--json]',

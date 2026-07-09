@@ -24,7 +24,7 @@
     "english-pilot": "./dist/src/bin/english-pilot.js"
   },
   "scripts": {
-    "build": "rm -rf dist && tsc",
+    "build": "rm -rf dist && tsc && chmod +x dist/src/bin/english-pilot.js",
     "audit": "npm audit --audit-level=moderate",
     "ci": "npm run audit && npm run project-health",
     "depcruise": "depcruise src --config .dependency-cruiser.cjs",
@@ -42,6 +42,7 @@
     "smoke": "node dist/src/bin/english-pilot.js eval smoke",
     "smoke:json": "node dist/src/bin/english-pilot.js eval smoke --json",
     "service:install": "node dist/src/bin/english-pilot.js service install",
+    "service:install-dev": "node dist/src/bin/english-pilot.js service install-dev",
     "service:uninstall": "node dist/src/bin/english-pilot.js service uninstall",
     "service:status": "node dist/src/bin/english-pilot.js service status",
     "service:restart": "node dist/src/bin/english-pilot.js service restart",

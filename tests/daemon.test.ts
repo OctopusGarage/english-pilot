@@ -107,13 +107,22 @@ describe('daemon runtime infrastructure', () => {
   it('reports service and daemon commands from the CLI', () => {
     const help = runCli(['help']);
     const dryRun = runCli(['service', 'install', '--dry-run', '--json']);
+    const devDryRun = runCli(['service', 'install-dev', '--dry-run', '--json']);
     const status = runCli(['daemon', 'status', '--json']);
 
     expect(help.stdout).toContain('english-pilot run [--dry-run] [--json]');
     expect(help.stdout).toContain('english-pilot service install [--dry-run] [--json]');
+    expect(help.stdout).toContain('english-pilot service install-dev [--dry-run] [--json]');
     expect(JSON.parse(dryRun.stdout)).toMatchObject({
       operation: 'service-install',
       dryRun: true,
+      devMode: false,
+    });
+    expect(JSON.parse(devDryRun.stdout)).toMatchObject({
+      operation: 'service-install-dev',
+      dryRun: true,
+      devMode: true,
+      launchdWrapper: 'scripts/dev-launchd-wrapper.sh',
     });
     expect(JSON.parse(status.stdout)).toMatchObject({
       running: false,

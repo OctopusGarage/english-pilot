@@ -232,13 +232,14 @@ WeChat uses QR-login long connection state under `~/.english-pilot/wechat/accoun
 
 ```bash
 english-pilot service install
+english-pilot service install-dev
 english-pilot service status
 english-pilot service logs
 english-pilot service restart
 english-pilot service uninstall
 ```
 
-`english-pilot run` starts the daemon in the foreground. `service install` registers it with launchd on macOS or a user systemd service on Linux.
+`english-pilot run` starts the daemon in the foreground. `service install` registers the built `dist` daemon with launchd on macOS or a user systemd service on Linux. On macOS, `service install-dev` installs a launchd service that points at this checkout and rebuilds on each restart, so local code changes go live with `english-pilot service restart`.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

@@ -8,6 +8,9 @@ case "$ACTION" in
   install)
     sh "$SCRIPT_DIR/install-service.sh"
     ;;
+  install-dev)
+    sh "$SCRIPT_DIR/install-service.sh" --dev
+    ;;
   uninstall)
     sh "$SCRIPT_DIR/uninstall-service.sh"
     ;;
@@ -53,7 +56,7 @@ case "$ACTION" in
     fi
     ;;
   *)
-    echo "Usage: service.sh install|uninstall|status|restart|pause|resume|logs" >&2
+    echo "Usage: service.sh install|install-dev|uninstall|status|restart|pause|resume|logs" >&2
     exit 2
     ;;
 esac
