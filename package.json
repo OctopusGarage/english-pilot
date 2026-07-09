@@ -23,7 +23,7 @@
     "PROJECT_PLAN.md"
   ],
   "bin": {
-    "english-pilot": "./dist/src/bin/english-pilot.js"
+    "english-pilot": "dist/src/bin/english-pilot.js"
   },
   "scripts": {
     "build": "rm -rf dist && tsc && chmod +x dist/src/bin/english-pilot.js",
