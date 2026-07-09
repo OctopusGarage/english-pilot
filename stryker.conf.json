@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "vitest",
+  "packageManager": "npm",
+  "coverageAnalysis": "perTest",
+  "mutate": [
+    "src/core/**/*.ts",
+    "src/agent/**/*.ts",
+    "src/channels/**/*.ts",
+    "src/integrations/**/*.ts",
+    "!src/**/*.d.ts"
+  ],
+  "reporters": ["html", "clear-text", "progress"],
+  "htmlReporter": {
+    "fileName": "reports/mutation/index.html"
+  },
+  "thresholds": {
+    "high": 70,
+    "low": 50,
+    "break": 45
+  },
+  "timeoutMS": 20000
+}

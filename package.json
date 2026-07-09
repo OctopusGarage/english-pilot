@@ -1,0 +1,81 @@
+{
+  "name": "english-pilot",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "English-dominant conversation gate, coaching assistant, and review system for AI workflows.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OctopusGarage/english-pilot.git"
+  },
+  "homepage": "https://github.com/OctopusGarage/english-pilot#readme",
+  "bugs": "https://github.com/OctopusGarage/english-pilot/issues",
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist/src",
+    "scripts",
+    "docs",
+    "README.md",
+    "PROJECT_PLAN.md"
+  ],
+  "bin": {
+    "english-pilot": "./dist/src/bin/english-pilot.js"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc",
+    "ci": "npm audit --audit-level=high && npm run project-health",
+    "depcruise": "depcruise src --config .dependency-cruiser.cjs",
+    "format": "prettier --write \"**/*.{ts,js,json,md,yml,yaml}\"",
+    "knip": "knip",
+    "lint": "eslint .",
+    "lint:sh": "shellcheck --severity=warning scripts/*.sh",
+    "mutation": "stryker run",
+    "prepublishOnly": "npm run build",
+    "prepare": "husky 2>/dev/null || true",
+    "project-health": "npm run lint && npm run lint:sh && npm run typecheck && npm run test:coverage && npm run build && npm run depcruise && npm run knip",
+    "release": "scripts/release.sh",
+    "secrets": "scripts/gitleaks-scan.sh git",
+    "secrets:staged": "scripts/gitleaks-scan.sh staged",
+    "service:install": "node dist/src/bin/english-pilot.js service install",
+    "service:uninstall": "node dist/src/bin/english-pilot.js service uninstall",
+    "service:status": "node dist/src/bin/english-pilot.js service status",
+    "service:restart": "node dist/src/bin/english-pilot.js service restart",
+    "service:logs": "node dist/src/bin/english-pilot.js service logs",
+    "start": "node dist/src/bin/english-pilot.js run",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage && node scripts/write-coverage-badge.mjs",
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run secrets && npm run project-health"
+  },
+  "engines": {
+    "node": ">=22.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/vitest-runner": "^9.6.1",
+    "@types/node": "^20.19.0",
+    "@types/qrcode-terminal": "^0.12.2",
+    "@vitest/coverage-v8": "^4.1.10",
+    "dependency-cruiser": "^18.0.0",
+    "eslint": "^10.6.0",
+    "husky": "^9.1.7",
+    "knip": "^6.25.0",
+    "lint-staged": "^17.0.8",
+    "prettier": "^3.9.4",
+    "typescript": "^5.5.0",
+    "typescript-eslint": "^8.63.0",
+    "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.70.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "qrcode-terminal": "^0.12.0",
+    "zod": "^3.25.76"
+  },
+  "overrides": {
+    "axios": "^1.17.0"
+  }
+}

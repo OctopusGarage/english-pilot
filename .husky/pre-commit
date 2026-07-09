@@ -1,0 +1,6 @@
+npx lint-staged
+npm run lint
+npm run lint:sh
+npm run secrets:staged
+npm run typecheck
+npm test

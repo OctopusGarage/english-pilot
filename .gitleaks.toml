@@ -1,0 +1,3 @@
+# Extend the upstream default ruleset. Keep allowlists narrow and documented.
+[extend]
+useDefault = true
