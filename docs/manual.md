@@ -15,6 +15,23 @@ Obsidian/Markdown export and Voice/STT helpers are implemented but parked outsid
 
 The installer target registry currently marks Claude Code and Codex as supported. Cursor and Gemini CLI are listed as planned targets so future host support has a stable place to land without pretending those installers exist today.
 
+## Install
+
+Recommended packaged install or update:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/OctopusGarage/english-pilot/main/install.sh | bash
+```
+
+Npm install after publishing:
+
+```bash
+npm install -g english-pilot
+english-pilot setup --yes
+```
+
+Voice transcription setup is documented in [Voice STT Install](voice-stt-install.md). Apple Silicon Macs should use `mlx-whisper`; Intel Macs should start with `whisper.cpp`.
+
 ## Commands
 
 ```bash
@@ -28,6 +45,7 @@ npm run project-health
 node dist/src/bin/english-pilot.js check --text "I want to create a new project" --json
 node dist/src/bin/english-pilot.js hook claude --stdin
 node dist/src/bin/english-pilot.js hook codex --stdin
+node dist/src/bin/english-pilot.js setup --yes --agent codex --cwd /path/to/workspace --json
 node dist/src/bin/english-pilot.js install targets --json
 node dist/src/bin/english-pilot.js install claude --dry-run
 node dist/src/bin/english-pilot.js install claude --yes
@@ -160,6 +178,8 @@ The setup command stores QR-login account credentials under `~/.english-pilot/we
 
 If `externalAgentBackend` is set to `claude` or `codex`, allowed WeChat messages are handed to the same local AgentRunner used by Feishu and CLI. The WeChat reply keeps the saved long-connection context token when one is available.
 
+Allowed Feishu and WeChat messages send a short processing acknowledgement before invoking Claude/Codex, because the current channel adapters do not expose a native typing indicator. The default text is `Received. Working on it...`. Disable it with `WECHAT_PROCESSING_ACK=off` or `FEISHU_PROCESSING_ACK=off`; customize it with `WECHAT_PROCESSING_ACK_TEXT` or `FEISHU_PROCESSING_ACK_TEXT`.
+
 WeChat conversations automatically resume the last successful local agent thread for the same account, chat, sender, and cwd. Voice messages that already include a `voice_item.text` transcript are treated as voice input and routed to the same AgentRunner flow. The long-connection monitor catches transient update failures, backs off, and continues polling; session-expired responses trigger a refresh notification attempt plus setup guidance in logs.
 
 Send `/new` in WeChat to clear the active session for the current conversation scope. The next message starts a fresh Claude/Codex conversation.
@@ -184,6 +204,16 @@ node dist/src/bin/english-pilot.js service restart
 `run` starts one process that loads configured Feishu/Lark and WeChat channels, writes a running marker, holds an instance lock, and exposes a local Unix control socket at `~/.english-pilot/run/english-pilot.sock`. `daemon status` reads the running daemon through that socket when available and falls back to local marker inspection when it is stopped.
 
 `service install` registers the built `dist` daemon with launchd on macOS or a user systemd service on Linux. On macOS, `service install-dev` installs a launchd service that points at this checkout and runs `npm run build` on each service start before launching the daemon. Use it while developing or testing local channel code; after code changes, run `english-pilot service restart` to pick up the latest checkout. The service command is explicit; installing hooks or MCP servers does not automatically register a background process.
+
+Service runs can load environment variables from `~/.english-pilot/env`. This is the recommended place for background-only values such as `WHISPER_COMMAND`, `CLOUD_STT_PROVIDER`, `CLOUD_STT_API_KEY`, `CLOUD_STT_ENDPOINT`, `WECHAT_PROCESSING_ACK`, and `FEISHU_PROCESSING_ACK`. The file uses shell syntax:
+
+```bash
+WHISPER_COMMAND=/absolute/path/to/english-pilot-stt-wrapper.py
+WECHAT_PROCESSING_ACK=on
+WECHAT_PROCESSING_ACK_TEXT="Received. Working on it..."
+```
+
+Restart the service after editing this file.
 
 ## Development Gates
 
@@ -279,6 +309,8 @@ The managed runtime also uses:
 - `~/.english-pilot/run/.instance.lock` to prevent duplicate long-connection daemons.
 - `~/.english-pilot/run/.running` to detect unclean restarts.
 
+Use `english-pilot daemon status` or `english-pilot doctor` to find the active daemon log path. The JSONL daemon log includes stable event names such as `wechat.channel.running`, `wechat.stream.start`, `wechat.getupdates.retry`, `wechat.getupdates.recovered`, `wechat.session.expired`, and `wechat.message.received`. When WeChat or Feishu appears silent, first check whether the channel is running, whether inbound messages are arriving, whether the local Claude/Codex agent failed, and whether reply sending failed.
+
 Claude installation writes:
 
 - `~/.claude/hooks/english-pilot.sh`
@@ -323,6 +355,8 @@ English note: "原句" -> "A more natural English version."; Why: one practical 
 `voice preflight --provider <provider>` checks voice provider configuration without network calls. `manual` requires no configuration, `local-whisper` checks that `WHISPER_COMMAND` is configured, exists, and is executable, and `cloud-stt` checks `CLOUD_STT_PROVIDER`, `CLOUD_STT_API_KEY`, and `CLOUD_STT_ENDPOINT`.
 
 `voice transcribe --provider local-whisper --audio <path>` runs the configured local `WHISPER_COMMAND` with the audio path as its argument and reads the transcript from stdout. `voice transcribe --provider cloud-stt --audio <path>` posts base64 audio to `CLOUD_STT_ENDPOINT` with `Authorization: Bearer $CLOUD_STT_API_KEY`; the API key is not stored or returned. Plain-text local stdout is treated as the transcript. JSON output/responses are supported when they contain `text` or `transcript`, plus optional `words` entries with `word`, `start`/`end`, `confidence`, and nested `phonemes`. Root-level or segment-level `phonemes` with a `word` field are also attached to the matching word. Timing and confidence fields are normalized to `startSeconds`, `endSeconds`, and `confidence`.
+
+Recommended local STT installs are documented in [Voice STT Install](voice-stt-install.md): use `mlx-whisper` on Apple Silicon Macs and `whisper.cpp` on Intel Macs.
 
 `voice practice --provider local-whisper|cloud-stt --audio <path> --target "..."` transcribes the audio, compares it with the target sentence, and records a normal review item with `voice-practice` tags and IPA from the target sentence. If `--feedback` is omitted, EnglishPilot generates feedback from the transcript/target comparison, including missing or extra words, common grammar focus notes such as `want to + verb`, pronunciation focus words with IPA, word-level scoring, and phoneme-level scoring when the transcription provider returns confidence or timing values.
 

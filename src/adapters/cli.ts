@@ -10,6 +10,7 @@ import { runCheck, runCoach, runHook, runPronounce } from './cli-language.js';
 import { runDoctor, runExport, runGlossary, runHandoff, runRoadmap, runStats, runStatus } from './cli-project.js';
 import { runDaily, runReview } from './cli-review.js';
 import { runService } from './cli-service.js';
+import { runSetup } from './cli-setup.js';
 import type { CliAsyncOptions, CliResult } from './cli-types.js';
 import { runVoice, runVoiceAsync } from './cli-voice.js';
 import { helpText } from './cli-help.js';
@@ -30,6 +31,7 @@ export function runCli(argv: string[], stdin = ''): CliResult {
   if (command === 'hook') return runHook(args, stdin);
   if (command === 'install') return runInstall(args);
   if (command === 'uninstall') return runUninstall(args);
+  if (command === 'setup') return runSetup(args);
   if (command === 'service') return runService(args);
   if (command === 'daemon') return runDaemonCommand(args);
   if (command === 'config') return runConfig(args);

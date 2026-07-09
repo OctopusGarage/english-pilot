@@ -47,6 +47,7 @@ describe('WeChat long-connection channel', () => {
     });
     expect(report.config?.accounts).toHaveLength(1);
     expect(report.config?.allowedUsers.has('wxid_owner@im.wechat')).toBe(true);
+    expect(report.config?.processingAckText).toBe('Received. Working on it...');
     expect(JSON.parse(dryRun.stdout)).toMatchObject({
       operation: 'wechat-long-connection-start',
       ready: true,
@@ -107,6 +108,7 @@ describe('WeChat long-connection channel', () => {
         allowedUsers: new Set(['wxid_owner@im.wechat']),
         replyMode: 'violation',
         botAgent: 'EnglishPilot/0.1.0',
+        processingAckText: 'Received. Working on it...',
       },
       message: {
         message_id: 'msg-1',
@@ -149,7 +151,7 @@ describe('WeChat long-connection channel', () => {
     expect(prompts[0]).toContain('Required: after the main reply');
     expect(prompts[0]).toContain('English note:');
     expect(prompts[0]).toContain('Do not omit it.');
-    expect(sent).toEqual(['Here is a concise reply.']);
+    expect(sent).toEqual(['Received. Working on it...', 'Here is a concise reply.']);
   });
 
   it('resumes the previous Codex thread for the same WeChat conversation scope', async () => {
@@ -278,6 +280,7 @@ describe('WeChat long-connection channel', () => {
     const account = accountFixture();
     let attempts = 0;
     const logs: string[] = [];
+    const delays: number[] = [];
 
     await monitorWeChatAccount({
       account,
@@ -289,7 +292,9 @@ describe('WeChat long-connection channel', () => {
       },
       maxIterations: 2,
       log: (line) => logs.push(line),
-      sleep: async () => {},
+      sleep: async (delayMs) => {
+        delays.push(delayMs);
+      },
       getUpdates: async () => {
         attempts += 1;
         if (attempts === 1) throw new Error('network down');
@@ -304,6 +309,34 @@ describe('WeChat long-connection channel', () => {
 
     expect(attempts).toBe(2);
     expect(logs.join('\n')).toContain('network down');
+    expect(logs.join('\n')).toContain('recovered after 1 failed attempt');
+    expect(delays).toEqual([3000]);
+  });
+
+  it('uses exponential capped backoff for repeated WeChat update failures', async () => {
+    const account = accountFixture();
+    const delays: number[] = [];
+
+    await monitorWeChatAccount({
+      account,
+      config: {
+        accounts: [account],
+        allowedUsers: new Set(['wxid_owner@im.wechat']),
+        replyMode: 'violation',
+        botAgent: 'EnglishPilot/0.1.0',
+      },
+      maxIterations: 5,
+      log: () => {},
+      sleep: async (delayMs) => {
+        delays.push(delayMs);
+      },
+      getUpdates: async () => {
+        throw new Error('network down');
+      },
+      notifyStop: async () => {},
+    });
+
+    expect(delays).toEqual([3000, 6000, 12000, 24000, 48000]);
   });
 });
 

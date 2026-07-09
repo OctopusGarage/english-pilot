@@ -14,6 +14,7 @@ export function runDaemonCommand(args: string[]): CliResult {
       controlSocketPath: layout.controlSocketPath,
       instanceLockPath: layout.instanceLockPath,
       runningMarkerPath: layout.runningMarkerPath,
+      daemonLogPath: layout.daemonLogPath,
       uncleanRestart: restart.unclean,
       ...(restart.unclean && restart.pid !== undefined ? { pid: restart.pid } : {}),
       ...(restart.unclean && restart.startedAt !== undefined ? { startedAt: restart.startedAt } : {}),
@@ -83,6 +84,7 @@ function formatDaemonStatus(status: {
   controlSocketPath: string;
   instanceLockPath: string;
   runningMarkerPath: string;
+  daemonLogPath: string;
   uncleanRestart: boolean;
   pid?: number;
   startedAt?: string;
@@ -94,6 +96,7 @@ function formatDaemonStatus(status: {
     `Control socket: ${status.controlSocketPath}`,
     `Instance lock: ${status.instanceLockPath}`,
     `Running marker: ${status.runningMarkerPath}`,
+    `Daemon log: ${status.daemonLogPath}`,
     `Unclean restart marker: ${status.uncleanRestart ? 'yes' : 'no'}`,
     ...(status.pid ? [`PID: ${status.pid}`] : []),
     ...(status.startedAt ? [`Started at: ${status.startedAt}`] : []),

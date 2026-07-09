@@ -73,6 +73,74 @@ describe('installer target registry', () => {
   });
 });
 
+describe('setup command', () => {
+  let previousHome: string | undefined;
+  let home: string;
+
+  beforeEach(() => {
+    previousHome = process.env.ENGLISH_PILOT_HOME;
+    home = mkdtempSync(join(tmpdir(), 'english-pilot-setup-'));
+    process.env.ENGLISH_PILOT_HOME = home;
+  });
+
+  afterEach(() => {
+    if (previousHome === undefined) {
+      delete process.env.ENGLISH_PILOT_HOME;
+    } else {
+      process.env.ENGLISH_PILOT_HOME = previousHome;
+    }
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  it('creates the service env file and returns next commands', () => {
+    const result = runCli(['setup', '--yes', '--json']);
+    const parsed = JSON.parse(result.stdout);
+    const envPath = join(home, 'env');
+
+    expect(result.exitCode).toBe(0);
+    expect(parsed).toMatchObject({
+      operation: 'setup',
+      home,
+      envPath,
+      envCreated: true,
+      agentBackend: 'off',
+    });
+    expect(parsed.nextCommands).toContain('english-pilot wechat setup');
+    expect(parsed.nextCommands).toContain('english-pilot service install');
+    expect(readFileSync(envPath, 'utf8')).toContain('WECHAT_PROCESSING_ACK=on');
+    expect(readFileSync(envPath, 'utf8')).toContain('FEISHU_PROCESSING_ACK=on');
+  });
+
+  it('writes external agent defaults when requested', () => {
+    const result = runCli(['setup', '--yes', '--agent', 'codex', '--cwd', '/tmp/project', '--json']);
+    const config = JSON.parse(readFileSync(join(home, 'config.json'), 'utf8'));
+
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      agentBackend: 'codex',
+      externalAgentCwd: '/tmp/project',
+    });
+    expect(config.externalAgentBackend).toBe('codex');
+    expect(config.externalAgentCwd).toBe('/tmp/project');
+  });
+
+  it('rejects an unknown agent backend', () => {
+    const result = runCli(['setup', '--agent', 'gemini']);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('english-pilot setup');
+  });
+});
+
+describe('packaged installation files', () => {
+  it('ships the release installer and concise install guide', () => {
+    const packageJson = JSON.parse(readFileSync('package.json', 'utf8'));
+
+    expect(packageJson.files).toContain('install.sh');
+    expect(packageJson.files).toContain('INSTALL.md');
+  });
+});
+
 describe('Claude installer commands', () => {
   let previousInstallHome: string | undefined;
   let installHome: string;

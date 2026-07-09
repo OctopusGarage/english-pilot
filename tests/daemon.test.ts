@@ -6,6 +6,7 @@ import { runCli } from '../src/adapters/cli.js';
 import { createControlClient } from '../src/adapters/control/client.js';
 import { startControlServer } from '../src/adapters/control/server.js';
 import { createInstanceLock, InstanceLockHeldError } from '../src/core/infra/instance-lock.js';
+import { createRuntimeLogger } from '../src/core/infra/logger.js';
 import { detectUncleanRestart, markCleanShutdown, markRunning } from '../src/core/infra/lifecycle.js';
 import { ensureRuntimeLayout } from '../src/core/infra/state-dir.js';
 
@@ -74,6 +75,34 @@ describe('daemon runtime infrastructure', () => {
     expect(detectUncleanRestart(layout.runningMarkerPath).unclean).toBe(false);
   });
 
+  it('writes structured JSONL runtime logs with contextual fields', () => {
+    const layout = ensureRuntimeLayout();
+    const logger = createRuntimeLogger(layout.daemonLogPath).child({
+      component: 'wechat',
+      accountId: 'bot-im-bot',
+    });
+
+    logger.warn('wechat.getupdates.retry', 'WeChat getupdates failed; retrying.', {
+      failures: 2,
+      delayMs: 6000,
+      error: 'fetch failed',
+    });
+
+    const [line] = readFileSync(layout.daemonLogPath, 'utf8').trim().split('\n');
+    const event = JSON.parse(line);
+    expect(event).toMatchObject({
+      level: 'warn',
+      event: 'wechat.getupdates.retry',
+      message: 'WeChat getupdates failed; retrying.',
+      component: 'wechat',
+      accountId: 'bot-im-bot',
+      failures: 2,
+      delayMs: 6000,
+      error: 'fetch failed',
+    });
+    expect(event.time).toEqual(expect.any(String));
+  });
+
   it('serves daemon status over a local control socket', async () => {
     const layout = ensureRuntimeLayout();
     const server = await startControlServer({
@@ -126,6 +155,7 @@ describe('daemon runtime infrastructure', () => {
     });
     expect(JSON.parse(status.stdout)).toMatchObject({
       running: false,
+      daemonLogPath: join(home, 'logs', 'daemon.log'),
     });
   });
 
@@ -149,6 +179,7 @@ describe('daemon runtime infrastructure', () => {
       uncleanRestart: true,
       controlSocketPath: layout.controlSocketPath,
       instanceLockPath: layout.instanceLockPath,
+      daemonLogPath: layout.daemonLogPath,
     });
     expect(readFileSync(layout.runningMarkerPath, 'utf8')).toContain('2026-07-09T00:00:00.000Z');
   });

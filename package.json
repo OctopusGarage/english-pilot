@@ -17,6 +17,8 @@
     "dist/src",
     "scripts",
     "docs",
+    "install.sh",
+    "INSTALL.md",
     "README.md",
     "PROJECT_PLAN.md"
   ],
@@ -31,7 +33,7 @@
     "format": "prettier --write \"**/*.{ts,js,json,md,yml,yaml}\"",
     "knip": "knip",
     "lint": "eslint .",
-    "lint:sh": "shellcheck --severity=warning scripts/*.sh",
+    "lint:sh": "shellcheck --severity=warning install.sh scripts/*.sh",
     "mutation": "stryker run",
     "prepublishOnly": "npm run build",
     "prepare": "husky 2>/dev/null || true",

@@ -7,6 +7,7 @@ export interface WeChatChannelConfig {
   allowedUsers: Set<string>;
   replyMode: WeChatReplyMode;
   botAgent: string;
+  processingAckText?: string;
 }
 
 export interface WeChatChannelConfigReport {
@@ -30,6 +31,7 @@ export function loadWeChatChannelConfig(env: NodeJS.ProcessEnv = process.env): W
     allowedUsers,
     replyMode: parseReplyMode(env.WECHAT_REPLY_MODE),
     botAgent: sanitizeBotAgent(env.WECHAT_BOT_AGENT),
+    processingAckText: parseProcessingAckText(env.WECHAT_PROCESSING_ACK, env.WECHAT_PROCESSING_ACK_TEXT),
   };
   return {
     ok: missing.length === 0,
@@ -54,6 +56,7 @@ export function formatWeChatChannelDoctor(report: WeChatChannelConfigReport): st
           `Allowed users: ${report.config.allowedUsers.size}`,
           `Reply mode: ${report.config.replyMode}`,
           `Bot agent: ${report.config.botAgent}`,
+          `Processing ack: ${report.config.processingAckText ? 'enabled' : 'disabled'}`,
         ]
       : []),
     '',
@@ -81,4 +84,11 @@ function sanitizeBotAgent(value: string | undefined): string {
   const trimmed = value?.trim();
   if (!trimmed) return 'EnglishPilot/0.1.0';
   return /^[\x20-\x7e]{1,256}$/.test(trimmed) ? trimmed : 'EnglishPilot/0.1.0';
+}
+
+function parseProcessingAckText(enabled: string | undefined, text: string | undefined): string | undefined {
+  const normalized = enabled?.trim().toLowerCase();
+  if (normalized === 'off' || normalized === 'false' || normalized === '0' || normalized === 'no') return undefined;
+  const custom = text?.trim();
+  return custom || 'Received. Working on it...';
 }

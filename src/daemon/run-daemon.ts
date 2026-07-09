@@ -32,6 +32,7 @@ export interface DaemonStatusSnapshot {
   controlSocketPath: string;
   instanceLockPath: string;
   runningMarkerPath: string;
+  daemonLogPath: string;
   uncleanRestart: boolean;
   pid?: number;
   startedAt?: string;
@@ -80,6 +81,7 @@ export async function runDaemon(
       wechatReady: wechat.ok,
       channels: result.channels,
       abortSignal: runtime.abortController.signal,
+      logger,
       log: (line) => {
         logger.info(line);
         input.log?.(line);
@@ -106,6 +108,7 @@ export async function getDaemonStatusSnapshot(): Promise<DaemonStatusSnapshot> {
       controlSocketPath: layout.controlSocketPath,
       instanceLockPath: layout.instanceLockPath,
       runningMarkerPath: layout.runningMarkerPath,
+      daemonLogPath: layout.daemonLogPath,
       uncleanRestart: false,
       pid: status.pid,
       startedAt: status.startedAt,
@@ -118,6 +121,7 @@ export async function getDaemonStatusSnapshot(): Promise<DaemonStatusSnapshot> {
       controlSocketPath: layout.controlSocketPath,
       instanceLockPath: layout.instanceLockPath,
       runningMarkerPath: layout.runningMarkerPath,
+      daemonLogPath: layout.daemonLogPath,
       uncleanRestart: restart.unclean,
       ...(restart.unclean && restart.pid !== undefined ? { pid: restart.pid } : {}),
       ...(restart.unclean && restart.startedAt !== undefined ? { startedAt: restart.startedAt } : {}),
@@ -187,27 +191,38 @@ function startConfiguredChannels(input: {
   wechatReady: boolean;
   channels: DaemonRunResult['channels'];
   abortSignal: AbortSignal;
+  logger: RuntimeLogger;
   log: (line: string) => void;
 }): void {
   if (input.feishuReady) {
     input.channels.feishu = 'starting';
-    void startFeishuChannel({ log: input.log })
+    input.logger.info('feishu.channel.starting', 'Feishu channel is starting.');
+    void startFeishuChannel({ log: input.log, logger: input.logger })
       .then(() => {
         input.channels.feishu = 'running';
+        input.logger.info('feishu.channel.running', 'Feishu channel is running.');
       })
       .catch((error) => {
         input.channels.feishu = 'failed';
+        input.logger.error('feishu.channel.failed', 'Feishu channel failed.', {
+          error: error instanceof Error ? error.message : String(error),
+        });
         input.log(`Feishu channel failed: ${error instanceof Error ? error.message : String(error)}`);
       });
   }
   if (input.wechatReady) {
     input.channels.wechat = 'starting';
-    void startWeChatChannel({ log: input.log, abortSignal: input.abortSignal })
+    input.logger.info('wechat.channel.starting', 'WeChat channel is starting.');
+    void startWeChatChannel({ log: input.log, logger: input.logger, abortSignal: input.abortSignal })
       .then(() => {
         input.channels.wechat = 'running';
+        input.logger.info('wechat.channel.running', 'WeChat channel is running.');
       })
       .catch((error) => {
         input.channels.wechat = 'failed';
+        input.logger.error('wechat.channel.failed', 'WeChat channel failed.', {
+          error: error instanceof Error ? error.message : String(error),
+        });
         input.log(`WeChat channel failed: ${error instanceof Error ? error.message : String(error)}`);
       });
   }

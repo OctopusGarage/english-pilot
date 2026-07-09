@@ -5,6 +5,7 @@ export function helpText(): string {
     '  english-pilot check "I want to create a new project" [--json]',
     '  english-pilot check --stdin [--json]',
     '  english-pilot hook claude|codex --stdin',
+    '  english-pilot setup [--yes] [--agent off|claude|codex] [--cwd <path>] [--json]',
     '  english-pilot install targets [--json]',
     '  english-pilot install claude|codex --dry-run | --yes',
     '  english-pilot uninstall claude|codex --yes',

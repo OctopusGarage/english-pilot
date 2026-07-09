@@ -67,6 +67,7 @@ export async function buildFeishuConversationEnvelope(input: {
           config,
         ),
       sendText: (replyText) => sendFeishuText(channel, message.chatId, replyText),
+      processingAckText: config.processingAckText,
       messageLabel: message.messageId,
     },
   };

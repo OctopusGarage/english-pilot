@@ -71,5 +71,7 @@ export function buildFeishuEnvValues(result: {
     FEISHU_ALLOWED_OPEN_IDS: result.user_info?.open_id ?? '',
     FEISHU_DOMAIN: result.user_info?.tenant_brand === 'lark' ? 'lark' : 'feishu',
     FEISHU_REPLY_MODE: 'violation',
+    FEISHU_PROCESSING_ACK: 'on',
+    FEISHU_PROCESSING_ACK_TEXT: 'Received. Working on it...',
   };
 }

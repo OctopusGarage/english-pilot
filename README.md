@@ -134,60 +134,73 @@ See [docs/agent-runtime-design.md](docs/agent-runtime-design.md) for the local a
 - macOS or Linux
 - Claude Code CLI and/or Codex CLI when using external agent replies
 - Feishu/Lark or WeChat credentials only when enabling those channels
-- Optional: local Whisper command or cloud STT endpoint for voice transcription
+- Optional: local Whisper command or cloud STT endpoint for voice transcription. See [Voice STT install](docs/voice-stt-install.md) for Apple Silicon and Intel Mac recommendations.
 
 ### Installation
 
-From source:
+Recommended install or update:
 
 ```bash
-git clone https://github.com/OctopusGarage/english-pilot.git
-cd english-pilot
-npm ci
-npm run build
+curl -fsSL https://raw.githubusercontent.com/OctopusGarage/english-pilot/main/install.sh | bash
 ```
 
-After a release is published, npm installation is expected to be:
+Pin a release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/OctopusGarage/english-pilot/main/install.sh |
+  ENGLISH_PILOT_VERSION=vX.Y.Z bash
+```
+
+Or use npm after the package is published:
 
 ```bash
 npm install -g english-pilot
-english-pilot --help
+english-pilot setup --yes
 ```
 
-For now, source checkout is the canonical install path.
+See [INSTALL.md](INSTALL.md) for the packaged install path. Source checkout is still the development path.
 
 ### First Run
 
 Check a prompt:
 
 ```bash
-node dist/src/bin/english-pilot.js check --text "I want to create a new project" --json
+english-pilot check --text "I want to create a new project" --json
 ```
 
 Install Claude Code or Codex integration:
 
 ```bash
-node dist/src/bin/english-pilot.js install claude --yes
-node dist/src/bin/english-pilot.js install codex --yes
+english-pilot install claude --yes
+english-pilot install codex --yes
 ```
 
 Start the MCP server:
 
 ```bash
-node dist/src/bin/english-pilot.js serve --mcp
+english-pilot serve --mcp
 ```
 
 Run local diagnostics:
 
 ```bash
-node dist/src/bin/english-pilot.js doctor --json
+english-pilot doctor --json
 ```
+
+For background services, put service-only environment variables in `~/.english-pilot/env`, then restart the service:
+
+```bash
+WHISPER_COMMAND=/absolute/path/to/english-pilot-stt-wrapper.py
+WECHAT_PROCESSING_ACK=on
+```
+
+For voice setup, use [docs/voice-stt-install.md](docs/voice-stt-install.md). The short version is: Apple Silicon Macs should use `mlx-whisper`; Intel Macs should start with `whisper.cpp`.
 
 Run the deterministic local smoke eval:
 
 ```bash
-node dist/src/bin/english-pilot.js eval smoke --json
-node dist/src/bin/english-pilot.js eval prompts
+english-pilot eval smoke --json
+english-pilot eval prompts
 ```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -226,7 +239,7 @@ english-pilot wechat doctor --json
 english-pilot run
 ```
 
-WeChat uses QR-login long connection state under `~/.english-pilot/wechat/accounts/`. The channel runtime handles reconnect/session refresh and uses `/new` to clear the active local agent thread.
+WeChat uses QR-login long connection state under `~/.english-pilot/wechat/accounts/`. The channel runtime handles reconnect/session refresh and uses `/new` to clear the active local agent thread. Feishu and WeChat send `Received. Working on it...` before long Claude/Codex turns; set `WECHAT_PROCESSING_ACK=off` or `FEISHU_PROCESSING_ACK=off` to disable it.
 
 ### Managed Service
 
@@ -240,6 +253,8 @@ english-pilot service uninstall
 ```
 
 `english-pilot run` starts the daemon in the foreground. `service install` registers the built `dist` daemon with launchd on macOS or a user systemd service on Linux. On macOS, `service install-dev` installs a launchd service that points at this checkout and rebuilds on each restart, so local code changes go live with `english-pilot service restart`.
+
+Use `english-pilot daemon status` or `english-pilot doctor` to find `~/.english-pilot/logs/daemon.log`. It is JSONL and includes stable events for channel start, WeChat retry/recovery, session expiry, inbound messages, agent failures, and reply failures.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

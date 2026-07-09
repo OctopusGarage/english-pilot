@@ -50,6 +50,8 @@ describe('Feishu long-connection channel', () => {
       FEISHU_ALLOWED_OPEN_IDS: 'ou_user',
       FEISHU_DOMAIN: 'lark',
       FEISHU_REPLY_MODE: 'violation',
+      FEISHU_PROCESSING_ACK: 'on',
+      FEISHU_PROCESSING_ACK_TEXT: 'Received. Working on it...',
     });
   });
 
@@ -74,6 +76,7 @@ describe('Feishu long-connection channel', () => {
       missing: [],
     });
     expect(report.config?.allowedOpenIds.has('ou_user')).toBe(true);
+    expect(report.config?.processingAckText).toBe('Received. Working on it...');
     expect(JSON.parse(dryRun.stdout)).toMatchObject({
       operation: 'feishu-long-connection-start',
       ready: true,
@@ -90,6 +93,7 @@ describe('Feishu long-connection channel', () => {
       allowedOpenIds: new Set(['ou_allowed']),
       domain: 'feishu' as const,
       replyMode: 'violation' as const,
+      processingAckText: 'Received. Working on it...',
     };
     const channel = {
       send: async (chatId: string, input: SendInput, _options?: SendOptions): Promise<SendResult> => {
@@ -132,6 +136,7 @@ describe('Feishu long-connection channel', () => {
       allowedOpenIds: new Set(['ou_allowed']),
       domain: 'feishu' as const,
       replyMode: 'violation' as const,
+      processingAckText: 'Received. Working on it...',
     };
     const channel = {
       send: async (chatId: string, input: SendInput, _options?: SendOptions): Promise<SendResult> => {
@@ -171,8 +176,9 @@ describe('Feishu long-connection channel', () => {
     expect(prompts[0]).toContain('Required: after the main reply');
     expect(prompts[0]).toContain('English note:');
     expect(prompts[0]).toContain('Do not omit it.');
-    expect(sent).toHaveLength(1);
-    expect(sent[0].markdown).toContain('Here is a clearer version.');
+    expect(sent).toHaveLength(2);
+    expect(sent[0].markdown).toContain('Received. Working on it...');
+    expect(sent[1].markdown).toContain('Here is a clearer version.');
   });
 
   it('resumes the previous Claude session for the same Feishu conversation scope', async () => {

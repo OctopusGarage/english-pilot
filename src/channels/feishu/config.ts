@@ -11,6 +11,7 @@ export interface FeishuChannelConfig {
   allowedOpenIds: Set<string>;
   domain: FeishuDomain;
   replyMode: FeishuReplyMode;
+  processingAckText?: string;
 }
 
 export interface FeishuChannelConfigReport {
@@ -48,6 +49,7 @@ export function loadFeishuChannelConfig(
       allowedOpenIds: new Set(allowedOpenIds),
       domain: parseDomain(values.FEISHU_DOMAIN),
       replyMode: parseReplyMode(values.FEISHU_REPLY_MODE),
+      processingAckText: parseProcessingAckText(values.FEISHU_PROCESSING_ACK, values.FEISHU_PROCESSING_ACK_TEXT),
     },
   };
 }
@@ -63,6 +65,7 @@ export function formatFeishuChannelDoctor(report: FeishuChannelConfigReport): st
           `Domain: ${report.config.domain}`,
           `Allowed users: ${report.config.allowedOpenIds.size}`,
           `Reply mode: ${report.config.replyMode}`,
+          `Processing ack: ${report.config.processingAckText ? 'enabled' : 'disabled'}`,
         ]
       : []),
     '',
@@ -81,6 +84,8 @@ export function writeFeishuEnvFile(
     `FEISHU_ALLOWED_OPEN_IDS=${quoteEnv(values.FEISHU_ALLOWED_OPEN_IDS ?? '')}`,
     `FEISHU_DOMAIN=${quoteEnv(values.FEISHU_DOMAIN ?? 'feishu')}`,
     `FEISHU_REPLY_MODE=${quoteEnv(values.FEISHU_REPLY_MODE ?? 'violation')}`,
+    `FEISHU_PROCESSING_ACK=${quoteEnv(values.FEISHU_PROCESSING_ACK ?? 'on')}`,
+    `FEISHU_PROCESSING_ACK_TEXT=${quoteEnv(values.FEISHU_PROCESSING_ACK_TEXT ?? 'Received. Working on it...')}`,
     '',
   ].join('\n');
   writeFileSync(envPath, content, 'utf8');
@@ -110,7 +115,15 @@ const requiredFeishuEnvNames = ['FEISHU_APP_ID', 'FEISHU_APP_SECRET'] as const;
 
 function definedEnvValues(env: NodeJS.ProcessEnv): Record<string, string> {
   return Object.fromEntries(
-    ['FEISHU_APP_ID', 'FEISHU_APP_SECRET', 'FEISHU_ALLOWED_OPEN_IDS', 'FEISHU_DOMAIN', 'FEISHU_REPLY_MODE']
+    [
+      'FEISHU_APP_ID',
+      'FEISHU_APP_SECRET',
+      'FEISHU_ALLOWED_OPEN_IDS',
+      'FEISHU_DOMAIN',
+      'FEISHU_REPLY_MODE',
+      'FEISHU_PROCESSING_ACK',
+      'FEISHU_PROCESSING_ACK_TEXT',
+    ]
       .map((name) => [name, env[name]])
       .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].trim().length > 0),
   );
@@ -135,6 +148,13 @@ function parseReplyMode(value: string | undefined): FeishuReplyMode {
   const normalized = value?.trim().toLowerCase();
   if (normalized === 'silent' || normalized === 'always') return normalized;
   return 'violation';
+}
+
+function parseProcessingAckText(enabled: string | undefined, text: string | undefined): string | undefined {
+  const normalized = enabled?.trim().toLowerCase();
+  if (normalized === 'off' || normalized === 'false' || normalized === '0' || normalized === 'no') return undefined;
+  const custom = text?.trim();
+  return custom || 'Received. Working on it...';
 }
 
 function quoteEnv(value: string): string {

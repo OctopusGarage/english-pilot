@@ -67,6 +67,7 @@ export function buildWeChatConversationEnvelope(input: {
           contextToken: contextTokenForReply,
           botAgent: input.config.botAgent,
         }),
+      processingAckText: input.config.processingAckText,
       messageLabel: messageId,
     },
   };
