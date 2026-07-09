@@ -25,7 +25,8 @@
   },
   "scripts": {
     "build": "rm -rf dist && tsc",
-    "ci": "npm audit --audit-level=high && npm run project-health",
+    "audit": "npm audit --audit-level=moderate",
+    "ci": "npm run audit && npm run project-health",
     "depcruise": "depcruise src --config .dependency-cruiser.cjs",
     "format": "prettier --write \"**/*.{ts,js,json,md,yml,yaml}\"",
     "knip": "knip",
@@ -49,7 +50,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage && node scripts/write-coverage-badge.mjs",
     "typecheck": "tsc --noEmit",
-    "verify": "npm run secrets && npm run project-health"
+    "verify": "npm run secrets && npm run audit && npm run project-health"
   },
   "engines": {
     "node": ">=22.5"
@@ -78,6 +79,7 @@
     "zod": "^3.25.76"
   },
   "overrides": {
-    "axios": "^1.17.0"
+    "axios": "^1.17.0",
+    "qs": "^6.15.3"
   }
 }
