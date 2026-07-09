@@ -95,7 +95,7 @@ describe('setup command', () => {
   it('creates the service env file and returns next commands', () => {
     const result = runCli(['setup', '--yes', '--json']);
     const parsed = JSON.parse(result.stdout);
-    const envPath = join(home, 'env');
+    const envPath = join(home, '.env');
 
     expect(result.exitCode).toBe(0);
     expect(parsed).toMatchObject({

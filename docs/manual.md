@@ -205,7 +205,7 @@ node dist/src/bin/english-pilot.js service restart
 
 `service install` registers the built `dist` daemon with launchd on macOS or a user systemd service on Linux. On macOS, `service install-dev` installs a launchd service that points at this checkout and runs `npm run build` on each service start before launching the daemon. Use it while developing or testing local channel code; after code changes, run `english-pilot service restart` to pick up the latest checkout. The service command is explicit; installing hooks or MCP servers does not automatically register a background process.
 
-Service runs can load environment variables from `~/.english-pilot/env`. This is the recommended place for background-only values such as `WHISPER_COMMAND`, `CLOUD_STT_PROVIDER`, `CLOUD_STT_API_KEY`, `CLOUD_STT_ENDPOINT`, `WECHAT_PROCESSING_ACK`, and `FEISHU_PROCESSING_ACK`. The file uses shell syntax:
+Service runs can load environment variables from `~/.english-pilot/.env`. This is the recommended place for background-only values such as `WHISPER_COMMAND`, `CLOUD_STT_PROVIDER`, `CLOUD_STT_API_KEY`, `CLOUD_STT_ENDPOINT`, `WECHAT_PROCESSING_ACK`, and `FEISHU_PROCESSING_ACK`. The file uses shell syntax:
 
 ```bash
 WHISPER_COMMAND=/absolute/path/to/english-pilot-stt-wrapper.py

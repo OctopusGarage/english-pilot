@@ -20,7 +20,7 @@ export function runSetupPlan(input: {
   write?: boolean;
 }): SetupPlan {
   const home = getEnglishPilotHome();
-  const envPath = join(home, 'env');
+  const envPath = join(home, '.env');
   const envCreated = input.write === true ? ensureEnvFile(envPath) : !existsSync(envPath);
   const agentBackend = input.agentBackend ?? loadConfig().externalAgentBackend;
   if (input.write === true && input.agentBackend) {

@@ -31,4 +31,4 @@ english-pilot service install
 
 Runtime state lives under `~/.english-pilot`. The release installer puts the app under `~/.english-pilot/app` and creates `~/.local/bin/english-pilot`.
 
-Voice transcription is optional. For Feishu/Lark audio messages, configure `WHISPER_COMMAND` in `~/.english-pilot/env`; Apple Silicon Macs should use `mlx-whisper`, while Intel Macs should start with `whisper.cpp`. See [docs/voice-stt-install.md](docs/voice-stt-install.md).
+Voice transcription is optional. For Feishu/Lark audio messages, configure `WHISPER_COMMAND` in `~/.english-pilot/.env`; Apple Silicon Macs should use `mlx-whisper`, while Intel Macs should start with `whisper.cpp`. See [docs/voice-stt-install.md](docs/voice-stt-install.md).

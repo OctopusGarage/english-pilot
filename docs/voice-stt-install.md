@@ -79,7 +79,7 @@ Configure the daemon environment:
   printf 'WHISPER_COMMAND=%s\n' "$HOME/.english-pilot/bin/stt-mlx-whisper"
   printf 'WHISPER_LANGUAGE=zh\n'
   printf 'WHISPER_MODEL=mlx-community/whisper-large-v3-turbo\n'
-} >> ~/.english-pilot/env
+} >> ~/.english-pilot/.env
 ```
 
 Use `WHISPER_LANGUAGE=en` for English-only practice, `zh` for Mandarin, or `auto` when mixed-language detection is more important than predictable Chinese recognition.
@@ -142,7 +142,7 @@ Configure the daemon environment:
 {
   printf 'WHISPER_COMMAND=%s\n' "$HOME/.english-pilot/bin/stt-whisper-cpp"
   printf 'WHISPER_LANGUAGE=zh\n'
-} >> ~/.english-pilot/env
+} >> ~/.english-pilot/.env
 ```
 
 ## Verify
@@ -151,7 +151,7 @@ Run preflight:
 
 ```bash
 set -a
-. ~/.english-pilot/env
+. ~/.english-pilot/.env
 set +a
 english-pilot voice preflight --provider local-whisper --json
 ```
@@ -162,7 +162,7 @@ Transcribe a sample file:
 english-pilot voice transcribe --provider local-whisper --audio ./sample.wav --json
 ```
 
-Restart the daemon so launchd/systemd reloads `~/.english-pilot/env`:
+Restart the daemon so launchd/systemd reloads `~/.english-pilot/.env`:
 
 ```bash
 english-pilot service restart
@@ -184,4 +184,4 @@ The intended packaged experience is:
 english-pilot voice install
 ```
 
-That command should detect the host, install `mlx-whisper` on Apple Silicon or `whisper.cpp` on Intel Mac, create the wrapper, write `~/.english-pilot/env`, run a smoke test, and print the restart command. Until that command exists, use the manual steps above.
+That command should detect the host, install `mlx-whisper` on Apple Silicon or `whisper.cpp` on Intel Mac, create the wrapper, write `~/.english-pilot/.env`, run a smoke test, and print the restart command. Until that command exists, use the manual steps above.

@@ -187,7 +187,7 @@ Run local diagnostics:
 english-pilot doctor --json
 ```
 
-For background services, put service-only environment variables in `~/.english-pilot/env`, then restart the service:
+For background services, put service-only environment variables in `~/.english-pilot/.env`, then restart the service:
 
 ```bash
 WHISPER_COMMAND=/absolute/path/to/english-pilot-stt-wrapper.py
