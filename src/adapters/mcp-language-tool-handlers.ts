@@ -6,10 +6,10 @@ import { listGlossaryEntries } from '../core/glossary.js';
 import { lookupPronunciations } from '../core/pronunciation.js';
 import { listPromptEvents } from '../storage/repository.js';
 import { requireText } from './mcp-tool-arguments.js';
-import type { EnglishPilotMcpToolName } from './mcp-tool-registry.js';
+import type { McpToolName } from './mcp-tool-types.js';
 
 export function handleLanguageMcpTool(
-  name: EnglishPilotMcpToolName,
+  name: McpToolName,
   args: Record<string, unknown>,
 ): Record<string, unknown> | undefined {
   switch (name) {

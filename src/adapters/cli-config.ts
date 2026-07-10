@@ -88,7 +88,7 @@ export function runConfig(args: string[]): CliResult {
 
   if (subcommand === 'use') {
     const profile = findConfigProfile(key);
-    if (!profile) return usage('english-pilot config use beginner|balanced|strict|force [--json]');
+    if (!profile) return usage('english-pilot config use beginner|balanced|strict|force|coach [--json]');
     try {
       const config = applyConfigProfile(profile);
       return {
@@ -117,7 +117,7 @@ export function runConfig(args: string[]): CliResult {
   }
 
   return usage(
-    'english-pilot config get | config profiles [--json] | config profile-status [--json] | config progression-suggestion [--json] | config progression-apply [--yes] [--json] | config use beginner|balanced|strict|force [--json] | config set <key> <value>',
+    'english-pilot config get | config profiles [--json] | config profile-status [--json] | config progression-suggestion [--json] | config progression-apply [--yes] [--json] | config use beginner|balanced|strict|force|coach [--json] | config set <key> <value>',
   );
 }
 

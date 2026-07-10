@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { handleMcpToolCall, handleMcpToolCallAsync } from './mcp-server.js';
-import { listMcpToolDefinitions } from './mcp-tool-registry.js';
+import { listMcpToolDefinitions, type EnglishPilotMcpToolName } from './mcp-tool-registry.js';
 
 export function createMcpServer(): McpServer {
   const server = new McpServer({
@@ -10,15 +10,16 @@ export function createMcpServer(): McpServer {
   });
 
   for (const tool of listMcpToolDefinitions()) {
+    const toolName = tool.name as EnglishPilotMcpToolName;
     server.registerTool(
-      tool.name,
+      toolName,
       {
         description: tool.description,
         inputSchema: tool.inputSchema,
       },
       async (args: Record<string, unknown>) =>
         asTextContent(
-          tool.mode === 'async' ? await handleMcpToolCallAsync(tool.name, args) : handleMcpToolCall(tool.name, args),
+          tool.mode === 'async' ? await handleMcpToolCallAsync(toolName, args) : handleMcpToolCall(toolName, args),
         ),
     );
   }

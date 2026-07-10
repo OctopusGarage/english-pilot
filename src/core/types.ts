@@ -1,6 +1,7 @@
 export type PolicyDecision = 'BLOCK' | 'ALLOW_WITH_COACHING' | 'ALLOW_SILENT';
 
 export interface EnglishPilotPolicy {
+  gateMode: 'enforce' | 'coach';
   maxChineseRatio: number;
   targetChineseRatio: number;
   ratioProgression: 'manual' | 'scheduled';

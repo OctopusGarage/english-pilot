@@ -29,9 +29,11 @@ jobs:
       - run: scripts/verify-systemd-unit.sh
         if: matrix.os == 'ubuntu-latest'
       - run: npm run lint
+      - run: npm run portable-fixtures
       - run: npm run typecheck
       - run: npm run test:coverage
       - run: npm run build
+      - run: npm run smoke
       - run: npm run depcruise
       - run: npm run knip
 

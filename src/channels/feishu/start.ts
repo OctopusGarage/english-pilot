@@ -9,6 +9,7 @@ import {
 import { loadFeishuChannelConfig, type FeishuChannelConfig } from './config.js';
 import { buildFeishuConversationEnvelope } from './envelope.js';
 import { loadConfig } from '../../core/config.js';
+import type { RuntimeLogger } from '../../core/infra/logger.js';
 import { runExternalAgent } from '../../agent/runner.js';
 import { runExternalChannelConversation } from '../conversation-runtime.js';
 
@@ -27,6 +28,7 @@ export async function startFeishuChannel(
     config?: FeishuChannelConfig;
     dryRun?: boolean;
     log?: (line: string) => void;
+    logger?: RuntimeLogger;
   } = {},
 ): Promise<FeishuStartPreview> {
   const report = input.config
@@ -58,10 +60,21 @@ export async function startFeishuChannel(
 
   const channel = createChannel(report.config);
   channel.on('message', (message) => {
-    void handleFeishuMessage({ channel, config: report.config as FeishuChannelConfig, message, log: input.log });
+    void handleFeishuMessage({
+      channel,
+      config: report.config as FeishuChannelConfig,
+      message,
+      log: input.log,
+      logger: input.logger,
+    });
   });
   await channel.connect();
   input.log?.(`EnglishPilot Feishu channel is listening on ${report.config.domain}.`);
+  input.logger?.info('feishu.channel.listening', 'EnglishPilot Feishu channel is listening.', {
+    domain: report.config.domain,
+    allowedUsers: report.config.allowedOpenIds.size,
+    replyMode: report.config.replyMode,
+  });
   return preview;
 }
 
@@ -70,6 +83,7 @@ export async function handleFeishuMessage(input: {
   config: FeishuChannelConfig;
   message: NormalizedMessage;
   log?: (line: string) => void;
+  logger?: RuntimeLogger;
   runAgent?: typeof runExternalAgent;
   transcribeVoice?: (message: NormalizedMessage, resource: ResourceDescriptor) => Promise<string>;
 }): Promise<{ handled: boolean; replied: boolean; reason?: string }> {
@@ -86,11 +100,16 @@ export async function handleFeishuMessage(input: {
       ...envelope.envelope,
       runAgent: input.runAgent ?? runExternalAgent,
       log: input.log,
+      logger: input.logger,
     });
   } catch (error) {
     input.log?.(
       `Failed to handle Feishu message ${message.messageId}: ${error instanceof Error ? error.message : String(error)}`,
     );
+    input.logger?.warn('feishu.message.handler_failed', 'Failed to handle Feishu message.', {
+      messageId: message.messageId,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return { handled: false, replied: false, reason: 'handler-error' };
   }
 }

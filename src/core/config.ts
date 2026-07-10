@@ -33,6 +33,7 @@ export interface DoctorReport {
     controlSocketPath: string;
     instanceLockPath: string;
     runningMarkerPath: string;
+    daemonLogPath: string;
     uncleanRestart: boolean;
     pid?: number;
     startedAt?: string;
@@ -144,6 +145,7 @@ export function formatDoctorMarkdown(report: DoctorReport): string {
     `- Daemon running: ${report.daemon.running ? 'yes' : 'no'}`,
     `- Daemon socket: ${report.daemon.socketReachable ? 'reachable' : 'not reachable'} (${report.daemon.controlSocketPath})`,
     `- Daemon instance lock: ${report.daemon.instanceLockPath}`,
+    `- Daemon log: ${report.daemon.daemonLogPath}`,
     `- Daemon unclean restart marker: ${report.daemon.uncleanRestart ? 'yes' : 'no'}`,
     `- Rewrite: ${report.rewrite.ready ? 'ok' : `failed - ${report.rewrite.error}`} (${report.rewrite.backend})`,
     `- Claude hook: ${report.claude.hookInstalled ? 'installed' : 'missing'}`,
@@ -193,6 +195,7 @@ function inspectDaemon(): DoctorReport['daemon'] {
     controlSocketPath: layout.controlSocketPath,
     instanceLockPath: layout.instanceLockPath,
     runningMarkerPath: layout.runningMarkerPath,
+    daemonLogPath: layout.daemonLogPath,
     uncleanRestart: restart.unclean,
     ...(restart.unclean && restart.pid !== undefined ? { pid: restart.pid } : {}),
     ...(restart.unclean && restart.startedAt !== undefined ? { startedAt: restart.startedAt } : {}),
@@ -241,6 +244,7 @@ function parseConfigValue<K extends keyof EnglishPilotConfig>(key: K, value: str
 }
 
 function parseStringConfigValue<K extends keyof EnglishPilotConfig>(key: K, value: string): EnglishPilotConfig[K] {
+  if (key === 'gateMode') return parseOneOf(key, value, ['enforce', 'coach']) as EnglishPilotConfig[K];
   if (key === 'coachingIntensity')
     return parseOneOf(key, value, ['low', 'medium', 'high', 'force']) as EnglishPilotConfig[K];
   if (key === 'ratioProgression') {
@@ -267,6 +271,7 @@ function validateConfig(config: EnglishPilotConfig): EnglishPilotConfig {
   if (config.targetChineseRatio > config.maxChineseRatio) {
     throw new Error('targetChineseRatio must be less than or equal to maxChineseRatio.');
   }
+  validateOneOf('gateMode', config.gateMode, ['enforce', 'coach']);
   validateOneOf('coachingIntensity', config.coachingIntensity, ['low', 'medium', 'high', 'force']);
   validateRatioProgression(config.ratioProgression);
   validateOneOf('storage', config.storage, ['sqlite', 'jsonl']);

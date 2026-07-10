@@ -113,6 +113,50 @@ export const learningMcpToolDefinitions = [
   },
 
   {
+    name: 'english_input_history',
+    description: 'Return recent EnglishPilot user input history for agent-side summaries and teaching.',
+    inputSchema: {
+      date: z.string().optional(),
+      from: z.string().optional(),
+      to: z.string().optional(),
+      source: z.enum(['cli', 'claude-hook', 'codex-hook', 'mcp', 'feishu-channel', 'wechat-channel']).optional(),
+      decision: z.enum(['BLOCK', 'ALLOW_WITH_COACHING', 'ALLOW_SILENT']).optional(),
+      includeText: z.boolean().optional(),
+      limit: z.number().int().positive().optional(),
+    },
+    mode: 'sync',
+  },
+
+  {
+    name: 'english_notes_history',
+    description: 'Return EnglishPilot English notes and review items for reuse in lessons, speeches, and recaps.',
+    inputSchema: {
+      date: z.string().optional(),
+      from: z.string().optional(),
+      to: z.string().optional(),
+      tag: z.string().optional(),
+      tags: z.array(z.string()).optional(),
+      dueOnly: z.boolean().optional(),
+      limit: z.number().int().positive().optional(),
+    },
+    mode: 'sync',
+  },
+
+  {
+    name: 'english_learning_brief',
+    description:
+      'Return an agent-ready brief that combines input history, English notes, patterns, IPA, and activity ideas.',
+    inputSchema: {
+      date: z.string().optional(),
+      from: z.string().optional(),
+      to: z.string().optional(),
+      source: z.enum(['cli', 'claude-hook', 'codex-hook', 'mcp', 'feishu-channel', 'wechat-channel']).optional(),
+      limit: z.number().int().positive().optional(),
+    },
+    mode: 'sync',
+  },
+
+  {
     name: 'english_mark_review',
     description: 'Mark an EnglishPilot review item as again, hard, or easy.',
     inputSchema: {

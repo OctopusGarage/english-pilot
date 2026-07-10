@@ -1,4 +1,4 @@
-# ADR 0004: Hooks Enforce Input, Not Completed Output Rewriting
+# ADR 0004: Hooks Enforce Input And Record Completed Output Notes
 
 ## Status
 
@@ -6,14 +6,16 @@ Accepted
 
 ## Context
 
-EnglishPilot must block prompts that exceed the configured non-English threshold. It also wants final-response coaching notes when prompts are allowed but teachable. Codex and Claude hooks can intercept submitted prompts, but command hooks cannot directly edit an already completed assistant response.
+EnglishPilot defaults to blocking prompts that exceed the configured non-English threshold, but it also supports a non-blocking coach mode for users who want analysis, suggestions, and review recording without interrupting the current task. It also wants final-response coaching notes when prompts are allowed but teachable. Claude Code and Codex both provide submit-time hooks for input blocking and Stop hooks after a response finishes.
 
 ## Decision
 
-Use hooks for deterministic input blocking. Use MCP plus host guidance for final-response coaching notes. A future turn-end hook may detect a missing coaching note and ask for follow-up behavior, but it should not be modeled as direct output rewriting.
+Use submit hooks for deterministic input blocking when `gateMode=enforce`. When `gateMode=coach`, run the same submit-time analysis but downgrade over-threshold results to coaching and review recording instead of blocking. Use MCP plus host guidance to ask the agent to append a compact final-response `English note`. Use Stop hooks only to parse the completed assistant message and record the last parseable note into the review queue; do not use Stop hooks to rewrite the completed response.
 
 ## Consequences
 
-- The language gate remains reliable even when the model ignores coaching guidance.
-- Coaching-note consistency depends on host instructions, MCP availability, and force-mode guidance.
-- Tests should verify deterministic hook behavior separately from host-guidance text.
+- The language gate remains reliable in enforce mode even when the model ignores coaching guidance.
+- Coach mode is intentionally advisory: it preserves learning records and suggestions without preventing the main task from running.
+- Coaching-note consistency still depends on host instructions, MCP availability, and force-mode guidance.
+- Completed notes are persisted when they follow the supported `English note: original -> suggested`, `Why`, and optional `IPA` shape.
+- Tests should verify deterministic submit-hook blocking separately from Stop-hook note recording.

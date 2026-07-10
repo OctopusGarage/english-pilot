@@ -19,15 +19,20 @@ import {
 import { buildProjectStatus } from '../core/status.js';
 import { listPromptEvents } from '../storage/repository.js';
 import { optionalBoolean, optionalString, requireString } from './mcp-tool-arguments.js';
-import { mcpToolNames, type EnglishPilotMcpToolName } from './mcp-tool-registry.js';
+import type { McpToolName } from './mcp-tool-types.js';
+
+export interface McpProjectToolOptions {
+  toolNames?: readonly string[];
+}
 
 export function handleProjectMcpTool(
-  name: EnglishPilotMcpToolName,
+  name: McpToolName,
   args: Record<string, unknown>,
+  options: McpProjectToolOptions = {},
 ): Record<string, unknown> | undefined {
   switch (name) {
     case 'english_status':
-      return buildProjectStatus(mcpToolNames) as unknown as Record<string, unknown>;
+      return buildProjectStatus([...(options.toolNames ?? [])]) as unknown as Record<string, unknown>;
     case 'english_roadmap': {
       const target = optionalRoadmapTarget(args);
       const roadmap = buildRoadmap({ target });

@@ -2,13 +2,12 @@ import { once } from 'node:events';
 import { startControlServer, type ControlServer } from '../adapters/control/server.js';
 import type { ChannelRuntimeState, DaemonStatus } from '../adapters/control/protocol.js';
 import { loadFeishuChannelConfig } from '../channels/feishu/config.js';
-import { startFeishuChannel } from '../channels/feishu/start.js';
 import { loadWeChatChannelConfig } from '../channels/wechat/config.js';
-import { startWeChatChannel } from '../channels/wechat/start.js';
 import { createInstanceLock, InstanceLockHeldError, type InstanceLock } from '../core/infra/instance-lock.js';
 import { createRuntimeLogger, type RuntimeLogger } from '../core/infra/logger.js';
 import { detectUncleanRestart, markCleanShutdown, markRunning } from '../core/infra/lifecycle.js';
 import { ensureRuntimeLayout, type RuntimeLayout } from '../core/infra/state-dir.js';
+import { defaultDaemonChannelRuntimes, startConfiguredChannelRuntimes } from './channel-lifecycle.js';
 
 export interface DaemonRunResult {
   operation: 'daemon-run';
@@ -32,6 +31,7 @@ export interface DaemonStatusSnapshot {
   controlSocketPath: string;
   instanceLockPath: string;
   runningMarkerPath: string;
+  daemonLogPath: string;
   uncleanRestart: boolean;
   pid?: number;
   startedAt?: string;
@@ -75,11 +75,14 @@ export async function runDaemon(
     initialChannels: result.channels,
   });
   try {
-    startConfiguredChannels({
-      feishuReady: feishu.ok,
-      wechatReady: wechat.ok,
+    startConfiguredChannelRuntimes({
       channels: result.channels,
+      runtimes: defaultDaemonChannelRuntimes({
+        feishuReady: feishu.ok,
+        wechatReady: wechat.ok,
+      }),
       abortSignal: runtime.abortController.signal,
+      logger,
       log: (line) => {
         logger.info(line);
         input.log?.(line);
@@ -106,6 +109,7 @@ export async function getDaemonStatusSnapshot(): Promise<DaemonStatusSnapshot> {
       controlSocketPath: layout.controlSocketPath,
       instanceLockPath: layout.instanceLockPath,
       runningMarkerPath: layout.runningMarkerPath,
+      daemonLogPath: layout.daemonLogPath,
       uncleanRestart: false,
       pid: status.pid,
       startedAt: status.startedAt,
@@ -118,6 +122,7 @@ export async function getDaemonStatusSnapshot(): Promise<DaemonStatusSnapshot> {
       controlSocketPath: layout.controlSocketPath,
       instanceLockPath: layout.instanceLockPath,
       runningMarkerPath: layout.runningMarkerPath,
+      daemonLogPath: layout.daemonLogPath,
       uncleanRestart: restart.unclean,
       ...(restart.unclean && restart.pid !== undefined ? { pid: restart.pid } : {}),
       ...(restart.unclean && restart.startedAt !== undefined ? { startedAt: restart.startedAt } : {}),
@@ -180,35 +185,4 @@ async function closeRuntime(input: {
   markCleanShutdown(input.layout.runningMarkerPath);
   input.lock.release();
   input.logger.info('EnglishPilot daemon stopped cleanly.');
-}
-
-function startConfiguredChannels(input: {
-  feishuReady: boolean;
-  wechatReady: boolean;
-  channels: DaemonRunResult['channels'];
-  abortSignal: AbortSignal;
-  log: (line: string) => void;
-}): void {
-  if (input.feishuReady) {
-    input.channels.feishu = 'starting';
-    void startFeishuChannel({ log: input.log })
-      .then(() => {
-        input.channels.feishu = 'running';
-      })
-      .catch((error) => {
-        input.channels.feishu = 'failed';
-        input.log(`Feishu channel failed: ${error instanceof Error ? error.message : String(error)}`);
-      });
-  }
-  if (input.wechatReady) {
-    input.channels.wechat = 'starting';
-    void startWeChatChannel({ log: input.log, abortSignal: input.abortSignal })
-      .then(() => {
-        input.channels.wechat = 'running';
-      })
-      .catch((error) => {
-        input.channels.wechat = 'failed';
-        input.log(`WeChat channel failed: ${error instanceof Error ? error.message : String(error)}`);
-      });
-  }
 }

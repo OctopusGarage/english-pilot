@@ -21,7 +21,7 @@ import {
   requireString,
   requireVoiceProvider,
 } from './mcp-tool-arguments.js';
-import type { EnglishPilotMcpToolName } from './mcp-tool-registry.js';
+import type { McpToolName } from './mcp-tool-types.js';
 
 export interface McpVoiceAsyncOptions {
   env?: NodeJS.ProcessEnv;
@@ -29,7 +29,7 @@ export interface McpVoiceAsyncOptions {
 }
 
 export function handleVoiceMcpToolCall(
-  name: EnglishPilotMcpToolName,
+  name: McpToolName,
   args: Record<string, unknown>,
 ): Record<string, unknown> | undefined {
   switch (name) {
@@ -93,7 +93,7 @@ export function handleVoiceMcpToolCall(
 }
 
 export async function handleVoiceMcpToolCallAsync(
-  name: EnglishPilotMcpToolName,
+  name: McpToolName,
   args: Record<string, unknown>,
   options: McpVoiceAsyncOptions = {},
 ): Promise<Record<string, unknown> | undefined> {

@@ -3,10 +3,9 @@ import { isWeChatSenderAllowed, type WeChatChannelConfig } from './config.js';
 import { monitorWeChatTextMessage } from './monitor.js';
 import { sendWeChatText } from './replies.js';
 import { getWeChatContextToken, saveWeChatContextToken, type WeChatAccount } from './state.js';
-import type { ExternalChannelConversationEnvelope } from '../conversation-runtime.js';
+import { buildExternalChannelInboundEnvelope, type ExternalChannelEnvelopeResult } from '../inbound-envelope.js';
 
-export type WeChatEnvelopeResult =
-  { ok: true; envelope: ExternalChannelConversationEnvelope } | { ok: false; reason: string };
+export type WeChatEnvelopeResult = ExternalChannelEnvelopeResult;
 
 export function buildWeChatConversationEnvelope(input: {
   account: WeChatAccount;
@@ -23,7 +22,6 @@ export function buildWeChatConversationEnvelope(input: {
 
   const extracted = extractWeChatTextWithKind(input.message);
   const text = extracted.text.trim();
-  if (!text) return { ok: false, reason: 'empty-message' };
 
   const contextToken = String(input.message.context_token ?? '').trim();
   if (contextToken) saveWeChatContextToken(input.account.accountId, senderId, contextToken);
@@ -33,43 +31,41 @@ export function buildWeChatConversationEnvelope(input: {
   const contextTokenForReply = contextToken || getWeChatContextToken(input.account.accountId, senderId);
   const messageId = String(input.message.message_id ?? '');
 
-  return {
-    ok: true,
-    envelope: {
-      channel: 'wechat',
-      scope: wechatAgentScope(input.account.accountId, senderId, chat),
-      text,
-      inputKind: extracted.inputKind,
-      metadata: {
-        accountId: input.account.accountId,
-        senderId,
-        chatId: chat.chatId,
-        chatType: chat.chatType,
-        messageId,
-      },
-      monitorText: () =>
-        monitorWeChatTextMessage(
-          {
-            accountId: input.account.accountId,
-            senderId,
-            chatId: chat.chatId,
-            chatType: chat.chatType,
-            messageId,
-            text,
-          },
-          input.config,
-        ),
-      sendText: (replyText) =>
-        sendText({
-          account: input.account,
-          to: senderId,
-          text: replyText,
-          contextToken: contextTokenForReply,
-          botAgent: input.config.botAgent,
-        }),
-      messageLabel: messageId,
+  return buildExternalChannelInboundEnvelope({
+    channel: 'wechat',
+    scopeParts: wechatAgentScopeParts(input.account.accountId, senderId, chat),
+    text,
+    inputKind: extracted.inputKind,
+    metadata: {
+      accountId: input.account.accountId,
+      senderId,
+      chatId: chat.chatId,
+      chatType: chat.chatType,
+      messageId,
     },
-  };
+    monitorText: () =>
+      monitorWeChatTextMessage(
+        {
+          accountId: input.account.accountId,
+          senderId,
+          chatId: chat.chatId,
+          chatType: chat.chatType,
+          messageId,
+          text,
+        },
+        input.config,
+      ),
+    sendText: (replyText) =>
+      sendText({
+        account: input.account,
+        to: senderId,
+        text: replyText,
+        contextToken: contextTokenForReply,
+        botAgent: input.config.botAgent,
+      }),
+    processingAckText: input.config.processingAckText,
+    messageLabel: messageId,
+  });
 }
 
 function guessChat(message: WeChatUpdateMessage, accountId: string): { chatType: 'dm' | 'group'; chatId: string } {
@@ -88,10 +84,10 @@ function extractWeChatTextWithKind(message: WeChatUpdateMessage): { text: string
   return { text: extractWeChatText(message), inputKind: 'text' };
 }
 
-function wechatAgentScope(
+function wechatAgentScopeParts(
   accountId: string,
   senderId: string,
   chat: { chatType: 'dm' | 'group'; chatId: string },
-): string {
-  return ['wechat', accountId, chat.chatId, chat.chatType === 'group' ? senderId : 'dm'].join(':');
+): string[] {
+  return ['wechat', accountId, chat.chatId, chat.chatType === 'group' ? senderId : 'dm'];
 }

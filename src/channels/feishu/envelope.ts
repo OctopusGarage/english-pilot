@@ -11,7 +11,7 @@ import {
 } from '@larksuiteoapi/node-sdk';
 import { findVoiceProvider } from '../../core/voice-providers.js';
 import { transcribeVoiceAudio } from '../../core/voice-stt-gateway.js';
-import type { ExternalChannelConversationEnvelope } from '../conversation-runtime.js';
+import { buildExternalChannelInboundEnvelope, type ExternalChannelEnvelopeResult } from '../inbound-envelope.js';
 import { isFeishuSenderAllowed } from './auth.js';
 import { loadFeishuChannelConfig, type FeishuChannelConfig } from './config.js';
 import { monitorFeishuTextMessage } from './monitor.js';
@@ -19,8 +19,7 @@ import { sendFeishuText } from './replies.js';
 
 export type FeishuTranscribeVoice = (message: NormalizedMessage, resource: ResourceDescriptor) => Promise<string>;
 
-export type FeishuEnvelopeResult =
-  { ok: true; envelope: ExternalChannelConversationEnvelope } | { ok: false; reason: string };
+export type FeishuEnvelopeResult = ExternalChannelEnvelopeResult;
 
 export async function buildFeishuConversationEnvelope(input: {
   channel: Pick<LarkChannel, 'send'>;
@@ -37,43 +36,40 @@ export async function buildFeishuConversationEnvelope(input: {
     return { ok: false, reason: 'unsupported-content-type' };
   }
   const inputKind = audio ? 'voice' : 'text';
-  const text = audio
-    ? (await (input.transcribeVoice ?? defaultTranscribeFeishuVoice)(message, audio)).trim()
-    : message.content.trim();
-  if (!text) return { ok: false, reason: 'empty-message' };
+  const text = (
+    audio ? await (input.transcribeVoice ?? defaultTranscribeFeishuVoice)(message, audio) : message.content
+  ).trim();
 
-  return {
-    ok: true,
-    envelope: {
-      channel: 'feishu',
-      scope: feishuAgentScope(message),
-      text,
-      inputKind,
-      metadata: {
-        messageId: message.messageId,
-        senderId: message.senderId,
-        chatId: message.chatId,
-        chatType: message.chatType,
-      },
-      monitorText: () =>
-        monitorFeishuTextMessage(
-          {
-            text,
-            messageId: message.messageId,
-            senderId: message.senderId,
-            chatId: message.chatId,
-            chatType: message.chatType,
-          },
-          config,
-        ),
-      sendText: (replyText) => sendFeishuText(channel, message.chatId, replyText),
-      messageLabel: message.messageId,
+  return buildExternalChannelInboundEnvelope({
+    channel: 'feishu',
+    scopeParts: feishuAgentScopeParts(message),
+    text,
+    inputKind,
+    metadata: {
+      messageId: message.messageId,
+      senderId: message.senderId,
+      chatId: message.chatId,
+      chatType: message.chatType,
     },
-  };
+    monitorText: () =>
+      monitorFeishuTextMessage(
+        {
+          text,
+          messageId: message.messageId,
+          senderId: message.senderId,
+          chatId: message.chatId,
+          chatType: message.chatType,
+        },
+        config,
+      ),
+    sendText: (replyText) => sendFeishuText(channel, message.chatId, replyText),
+    processingAckText: config.processingAckText,
+    messageLabel: message.messageId,
+  });
 }
 
-function feishuAgentScope(message: NormalizedMessage): string {
-  return ['feishu', message.chatId, message.threadId ?? message.rootId ?? message.senderId].join(':');
+function feishuAgentScopeParts(message: NormalizedMessage): string[] {
+  return ['feishu', message.chatId, message.threadId ?? message.rootId ?? message.senderId];
 }
 
 function findAudioResource(message: NormalizedMessage): ResourceDescriptor | undefined {

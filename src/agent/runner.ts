@@ -1,86 +1,25 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import type { EnglishPilotConfig } from '../core/types.js';
+import { getExternalAgentBackendAdapter } from './backend-adapters.js';
+import type {
+  ExternalAgentBackend,
+  ExternalAgentChildProcess,
+  ExternalAgentInvocation,
+  ExternalAgentRunOptions,
+  ExternalAgentRunResult,
+} from './types.js';
 
-export type ExternalAgentBackend = Exclude<EnglishPilotConfig['externalAgentBackend'], 'off'>;
-
-export interface ExternalAgentInvocation {
-  backend: ExternalAgentBackend;
-  command: string;
-  args: string[];
-  cwd: string;
-  promptStdin: string;
-  sessionId?: string;
-  threadId?: string;
-}
-
-export interface ExternalAgentRunOptions {
-  config: EnglishPilotConfig;
-  prompt: string;
-  backend?: ExternalAgentBackend;
-  cwd?: string;
-  dryRun?: boolean;
-  timeoutMs?: number;
-  sessionId?: string;
-  threadId?: string;
-  spawnProcess?: typeof spawn;
-}
-
-export interface ExternalAgentRunResult extends ExternalAgentInvocation {
-  operation: 'external-agent-run';
-  dryRun: boolean;
-  exitCode: number | null;
-  signal?: NodeJS.Signals | null;
-  stdout: string;
-  stderr: string;
-  sessionId?: string;
-  threadId?: string;
-}
+export type {
+  ExternalAgentBackend,
+  ExternalAgentInvocation,
+  ExternalAgentRunOptions,
+  ExternalAgentRunResult,
+} from './types.js';
 
 export function buildExternalAgentInvocation(options: ExternalAgentRunOptions): ExternalAgentInvocation {
   const backend = resolveBackend(options.config, options.backend);
   const cwd = resolveCwd(options.config, options.cwd);
-  if (backend === 'claude') {
-    const args = [
-      '-p',
-      '--output-format',
-      'stream-json',
-      '--verbose',
-      '--permission-mode',
-      'bypassPermissions',
-      ...(options.sessionId ? ['--resume', options.sessionId] : []),
-    ];
-    return {
-      backend,
-      command: options.config.externalAgentClaudeBinary,
-      args,
-      cwd,
-      promptStdin: options.prompt,
-      ...(options.sessionId ? { sessionId: options.sessionId } : {}),
-    };
-  }
-
-  const globalFlags = [
-    '--sandbox',
-    options.config.externalAgentCodexSandbox,
-    '-c',
-    'approval_policy="never"',
-    '-c',
-    'shell_environment_policy.inherit="all"',
-    '--skip-git-repo-check',
-    '-C',
-    cwd,
-  ];
-  const args = options.threadId
-    ? ['exec', ...globalFlags, 'resume', '--json', options.threadId, '-']
-    : ['exec', '--json', ...globalFlags, '-'];
-  return {
-    backend,
-    command: options.config.externalAgentCodexBinary,
-    args,
-    cwd,
-    promptStdin: options.prompt,
-    ...(options.threadId ? { threadId: options.threadId } : {}),
-  };
+  return getExternalAgentBackendAdapter(backend).buildInvocation(options, cwd);
 }
 
 export async function runExternalAgent(options: ExternalAgentRunOptions): Promise<ExternalAgentRunResult> {
@@ -145,7 +84,7 @@ function spawnExternalAgent(
       cwd: invocation.cwd,
       stdio: 'pipe',
       shell: false,
-    }) as ChildProcessWithoutNullStreams;
+    }) as ExternalAgentChildProcess;
     let stdout = '';
     let stderr = '';
     let settled = false;
@@ -283,36 +222,9 @@ function dedupeAdjacentTextChunks(chunks: string[]): string[] {
 }
 
 function withExtractedConversationIds(result: ExternalAgentRunResult): ExternalAgentRunResult {
-  const ids = extractConversationIds(result.stdout);
+  const ids = getExternalAgentBackendAdapter(result.backend).extractConversationIds(result.stdout);
   return {
     ...result,
-    ...(result.backend === 'claude' && ids.sessionId ? { sessionId: ids.sessionId } : {}),
-    ...(result.backend === 'codex' && ids.threadId ? { threadId: ids.threadId } : {}),
+    ...ids,
   };
-}
-
-function extractConversationIds(stdout: string): { sessionId?: string; threadId?: string } {
-  let sessionId: string | undefined;
-  let threadId: string | undefined;
-  for (const line of stdout.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith('{')) continue;
-    try {
-      const parsed = JSON.parse(trimmed) as unknown;
-      if (!parsed || typeof parsed !== 'object') continue;
-      const record = parsed as Record<string, unknown>;
-      sessionId = sessionId ?? firstString(record.session_id, record.sessionId);
-      threadId = threadId ?? firstString(record.thread_id, record.threadId);
-    } catch {
-      // Ignore non-JSON progress lines.
-    }
-  }
-  return {
-    ...(sessionId ? { sessionId } : {}),
-    ...(threadId ? { threadId } : {}),
-  };
-}
-
-function firstString(...values: unknown[]): string | undefined {
-  return values.find((value): value is string => typeof value === 'string' && value.trim().length > 0)?.trim();
 }

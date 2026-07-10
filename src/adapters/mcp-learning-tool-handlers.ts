@@ -6,6 +6,12 @@ import {
   extractLesson,
 } from '../core/lesson.js';
 import { buildMethodTemplateLearningItem, findMethodTemplate, listMethodTemplates } from '../core/method-templates.js';
+import {
+  buildInputHistory,
+  buildLearningBrief,
+  buildNotesHistory,
+  type LearningHistoryOptions,
+} from '../core/learning-brief.js';
 import { buildPronunciationBite } from '../core/pronunciation.js';
 import { buildReviewCleanupPlan } from '../core/review-cleanup.js';
 import {
@@ -16,6 +22,7 @@ import {
 } from '../core/review-schedule.js';
 import {
   listLearningItems,
+  listPromptEvents,
   markLearningItemReview,
   recordLearningItem,
   removeLearningItem,
@@ -30,10 +37,10 @@ import {
   requireString,
   requireText,
 } from './mcp-tool-arguments.js';
-import type { EnglishPilotMcpToolName } from './mcp-tool-registry.js';
+import type { McpToolName } from './mcp-tool-types.js';
 
 export function handleLearningMcpTool(
-  name: EnglishPilotMcpToolName,
+  name: McpToolName,
   args: Record<string, unknown>,
 ): Record<string, unknown> | undefined {
   switch (name) {
@@ -84,6 +91,15 @@ export function handleLearningMcpTool(
     }
     case 'english_daily_pack':
       return buildDailyReviewPack(listLearningItems(), optionalDate(args)) as unknown as Record<string, unknown>;
+    case 'english_input_history':
+      return buildInputHistory(listPromptEvents(), historyOptions(args)) as unknown as Record<string, unknown>;
+    case 'english_notes_history':
+      return buildNotesHistory(listLearningItems(), historyOptions(args)) as unknown as Record<string, unknown>;
+    case 'english_learning_brief':
+      return buildLearningBrief(listPromptEvents(), listLearningItems(), historyOptions(args)) as unknown as Record<
+        string,
+        unknown
+      >;
     case 'english_mark_review': {
       const id = requireString(args, 'id');
       const outcome = requireReviewOutcome(args);
@@ -141,4 +157,50 @@ function optionalDate(args: Record<string, unknown>): string {
   const date = optionalString(args, 'date') ?? new Date().toISOString().slice(0, 10);
   if (!isDateKey(date)) throw new Error('MCP argument date must use YYYY-MM-DD.');
   return date;
+}
+
+function historyOptions(args: Record<string, unknown>): LearningHistoryOptions {
+  return {
+    ...(optionalString(args, 'date') ? { date: optionalString(args, 'date') } : {}),
+    ...(optionalString(args, 'from') ? { from: optionalString(args, 'from') } : {}),
+    ...(optionalString(args, 'to') ? { to: optionalString(args, 'to') } : {}),
+    ...(optionalSource(args) ? { source: optionalSource(args) } : {}),
+    ...(optionalDecision(args) ? { decision: optionalDecision(args) } : {}),
+    ...(optionalString(args, 'tag') ? { tag: optionalString(args, 'tag') } : {}),
+    ...(optionalStringArray(args, 'tags') ? { tags: optionalStringArray(args, 'tags') } : {}),
+    ...(optionalBoolean(args, 'dueOnly') !== undefined ? { dueOnly: optionalBoolean(args, 'dueOnly') } : {}),
+    ...(optionalBoolean(args, 'includeText') !== undefined
+      ? { includeText: optionalBoolean(args, 'includeText') }
+      : {}),
+    ...(optionalNumber(args, 'limit') ? { limit: optionalNumber(args, 'limit') } : {}),
+  };
+}
+
+function optionalSource(args: Record<string, unknown>): LearningHistoryOptions['source'] {
+  const source = optionalString(args, 'source');
+  if (
+    source === undefined ||
+    source === 'cli' ||
+    source === 'claude-hook' ||
+    source === 'codex-hook' ||
+    source === 'mcp' ||
+    source === 'feishu-channel' ||
+    source === 'wechat-channel'
+  ) {
+    return source;
+  }
+  throw new Error('MCP argument source must be cli, claude-hook, codex-hook, mcp, feishu-channel, or wechat-channel.');
+}
+
+function optionalDecision(args: Record<string, unknown>): LearningHistoryOptions['decision'] {
+  const decision = optionalString(args, 'decision');
+  if (
+    decision === undefined ||
+    decision === 'BLOCK' ||
+    decision === 'ALLOW_WITH_COACHING' ||
+    decision === 'ALLOW_SILENT'
+  ) {
+    return decision;
+  }
+  throw new Error('MCP argument decision must be BLOCK, ALLOW_WITH_COACHING, or ALLOW_SILENT.');
 }

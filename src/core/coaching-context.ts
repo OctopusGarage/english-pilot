@@ -8,6 +8,7 @@ export interface CoachingContext {
   finalResponseInstruction: string;
   cadence: string;
   policy: {
+    gateMode: EnglishPilotConfig['gateMode'];
     intensity: EnglishPilotConfig['coachingIntensity'];
     cooldownMinutes: number;
     maxInlineCoachingPerDay: number;
@@ -42,6 +43,7 @@ export function buildCoachingContext(input: {
   const cooldownUntil = buildCooldownUntil(lastCoachingEvent, input.config.coachingCooldownMinutes);
   const cooldownActive = cooldownUntil !== undefined && cooldownUntil.getTime() > now.getTime();
   const forceMode = input.config.coachingIntensity === 'force';
+  const coachMode = input.config.gateMode === 'coach';
   const reason = decideInlineCoaching({
     intensity: input.config.coachingIntensity,
     remaining,
@@ -51,6 +53,9 @@ export function buildCoachingContext(input: {
   return {
     guidance: [
       "Do not derail the user's main task.",
+      coachMode
+        ? 'Coach mode is enabled: do not treat over-threshold language as a blocker; continue the main task and add one useful English note when the prompt is teachable.'
+        : 'Enforce mode is enabled: over-threshold prompts are handled by the submit hook before the agent turn.',
       forceMode
         ? 'Force mode is enabled: append one concise English note whenever the prompt has Chinese fragments, non-native phrasing, or a clearly better everyday expression.'
         : 'When useful, add at most one short English note.',
@@ -70,6 +75,7 @@ export function buildCoachingContext(input: {
       'Skip only when there is no meaningful wording improvement.',
     ].join(' '),
     policy: {
+      gateMode: input.config.gateMode,
       intensity: input.config.coachingIntensity,
       cooldownMinutes: input.config.coachingCooldownMinutes,
       maxInlineCoachingPerDay: input.config.maxInlineCoachingPerDay,

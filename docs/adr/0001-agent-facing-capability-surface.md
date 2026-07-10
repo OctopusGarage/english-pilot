@@ -6,11 +6,13 @@ Accepted
 
 ## Context
 
-EnglishPilot needs to expose language analysis, rewrite, coaching context, review queues, diagnostics, integration helpers, and voice helpers to AI agents. Earlier planning considered skills plus CLI, but the current project does not need a separate skill surface.
+EnglishPilot needs to expose language analysis, rewrite, coaching context, review queues, prompt history, English notes history, diagnostics, integration helpers, and voice helpers to AI agents. Earlier planning considered skills plus CLI, but the current project does not need a separate skill surface.
 
 ## Decision
 
 Use MCP as the primary agent-facing interface. Keep CLI commands for human operation, hooks, daemon/service control, installation, and scriptable diagnostics.
+
+History-based teaching is split deliberately: MCP tools return deterministic local history and learning briefs, while the host agent generates the recap, lesson, speech, or review plan requested by the user.
 
 ## Consequences
 

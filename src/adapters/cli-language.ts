@@ -1,4 +1,5 @@
 import { buildClaudePromptSubmitResponse } from './claude-hook.js';
+import { extractLastAssistantEnglishNote } from '../core/assistant-note.js';
 import { loadConfig } from '../core/config.js';
 import { buildCoachingContext, type CoachingContext } from '../core/coaching-context.js';
 import { buildPromptAssessment, type PromptAssessment } from '../core/prompt-assessment.js';
@@ -7,6 +8,7 @@ import { extractLesson, type ExtractedLesson } from '../core/lesson.js';
 import { buildMethodTemplateLearningItem, listMethodTemplates, type MethodTemplate } from '../core/method-templates.js';
 import { listGlossaryEntries } from '../core/glossary.js';
 import { listPromptEvents, recordLearningItem, recordPromptEvent } from '../storage/repository.js';
+import { recordAssistantEnglishNote } from '../storage/assistant-note-recorder.js';
 import type { AnalysisResult } from '../core/types.js';
 import type { CliResult } from './cli-types.js';
 import { getFlagValue, getText, isRecord } from './cli-args.js';
@@ -66,6 +68,9 @@ export function runHook(args: string[], stdin: string): CliResult {
     };
   }
 
+  const stopResult = maybeHandleStopHook(target, args, payload);
+  if (stopResult) return stopResult;
+
   const prompt = isRecord(payload) && typeof payload.prompt === 'string' ? payload.prompt : '';
   const config = loadConfig();
   const assessment = prompt.trim()
@@ -80,6 +85,29 @@ export function runHook(args: string[], stdin: string): CliResult {
   return {
     exitCode: 0,
     stdout: response ? `${JSON.stringify(response)}\n` : '',
+    stderr: '',
+  };
+}
+
+function maybeHandleStopHook(target: 'claude' | 'codex', args: string[], payload: unknown): CliResult | undefined {
+  if (!isStopHookPayload(payload)) return undefined;
+
+  const note = extractLastAssistantEnglishNote(payload.last_assistant_message);
+  const item = note ? recordAssistantEnglishNote(target, note) : undefined;
+  if (!args.includes('--json')) return { exitCode: 0, stdout: '', stderr: '' };
+
+  return {
+    exitCode: 0,
+    stdout: `${JSON.stringify(
+      {
+        operation: 'english-pilot-stop-hook',
+        target,
+        recorded: item !== undefined,
+        ...(item ? { item } : {}),
+      },
+      null,
+      2,
+    )}\n`,
     stderr: '',
   };
 }
@@ -173,6 +201,12 @@ function allowedGlossaryTerms(): string[] {
     .map((entry) => entry.term);
 }
 
+function isStopHookPayload(value: unknown): value is { last_assistant_message: string } {
+  if (!isRecord(value)) return false;
+  if (value.hook_event_name !== 'Stop') return false;
+  return typeof value.last_assistant_message === 'string' && value.last_assistant_message.trim().length > 0;
+}
+
 function maybeRecordLearningItem(assessment: PromptAssessment, config: ReturnType<typeof loadConfig>): void {
   if (!assessment.shouldRecordLearningPrompt) return;
   if (assessment.analysis.decision !== 'BLOCK' && !config.recordAllowedPrompts) return;
@@ -195,6 +229,7 @@ function recordLessonIfWorthwhile(lesson: ExtractedLesson): boolean {
 function formatCoachingContext(context: CoachingContext): string {
   return [
     'Coaching context',
+    `Gate mode: ${context.policy.gateMode}`,
     `Intensity: ${context.policy.intensity}`,
     `Cooldown: ${context.cooldown.active ? `active until ${context.cooldown.until}` : 'inactive'}`,
     `Today: ${context.today.coachingShown} shown, ${context.today.remaining} remaining`,

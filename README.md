@@ -8,7 +8,7 @@
 [![CodeQL](https://github.com/OctopusGarage/english-pilot/actions/workflows/codeql.yml/badge.svg)](https://github.com/OctopusGarage/english-pilot/actions/workflows/codeql.yml)
 [![Coverage](badges/coverage.svg)](badges/coverage.svg)
 [![version](https://img.shields.io/github/package-json/v/OctopusGarage/english-pilot)](https://github.com/OctopusGarage/english-pilot/releases/latest)
-[![npm](https://img.shields.io/npm/v/english-pilot?logo=npm)](https://www.npmjs.com/package/english-pilot)
+[![npm](https://img.shields.io/npm/v/@octopusgarage/english-pilot?logo=npm)](https://www.npmjs.com/package/@octopusgarage/english-pilot)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.5-brightgreen)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -17,7 +17,7 @@
 [![Prettier](https://img.shields.io/badge/format-Prettier-F7B93E?logo=prettier&logoColor=black)](https://prettier.io)
 
 <p align="center">
-  EnglishPilot is a local-first English learning gate for AI workflows: it blocks over-Chinese prompts, suggests copyable English rewrites, records useful lessons, and lets Claude Code / Codex / Feishu / WeChat share the same coaching and review loop.
+  EnglishPilot is a local-first English learning gate for AI workflows: it can block or coach over-Chinese prompts, suggests copyable English rewrites, records useful lessons, and lets Claude Code / Codex / Feishu / WeChat share the same coaching and review loop.
   <br />
   <br />
   <a href="docs/manual.md"><strong>Read the manual »</strong></a>
@@ -26,6 +26,8 @@
   <a href="#features">Features</a>
   ·
   <a href="#getting-started">Getting Started</a>
+  ·
+  <a href="docs/eval-and-quality.md">Eval & Quality</a>
   ·
   <a href="https://github.com/OctopusGarage/english-pilot/issues/new?template=bug_report.yml">Report Bug</a>
   ·
@@ -59,7 +61,7 @@ EnglishPilot sits in front of prompts and chat messages. It keeps the main sente
 
 It has two runtime modes:
 
-- **Inline agent mode** — Claude Code / Codex hooks enforce the language gate; MCP exposes coaching, review, diagnostics, and roadmap tools to the running agent.
+- **Inline agent mode** — Claude Code / Codex hooks enforce or coach through the language gate; MCP exposes coaching, review, diagnostics, and roadmap tools to the running agent.
 - **Managed channel mode** — a daemon maintains Feishu/Lark and WeChat long connections, checks incoming messages, optionally calls a configured local agent backend, and replies through the same channel.
 
 The goal is not to replace English study time. It makes normal work conversations carry a small, steady English practice loop without interrupting the real task unless the prompt crosses the configured threshold.
@@ -134,61 +136,78 @@ See [docs/agent-runtime-design.md](docs/agent-runtime-design.md) for the local a
 - macOS or Linux
 - Claude Code CLI and/or Codex CLI when using external agent replies
 - Feishu/Lark or WeChat credentials only when enabling those channels
-- Optional: local Whisper command or cloud STT endpoint for voice transcription
+- Optional: local Whisper command or cloud STT endpoint for voice transcription. See [Voice STT install](docs/voice-stt-install.md) for Apple Silicon and Intel Mac recommendations.
 
 ### Installation
 
-From source:
+Recommended install or update:
 
 ```bash
-git clone https://github.com/OctopusGarage/english-pilot.git
-cd english-pilot
-npm ci
-npm run build
+curl -fsSL https://raw.githubusercontent.com/OctopusGarage/english-pilot/main/install.sh | bash
 ```
 
-After a release is published, npm installation is expected to be:
+Pin a release:
 
 ```bash
-npm install -g english-pilot
-english-pilot --help
+curl -fsSL https://raw.githubusercontent.com/OctopusGarage/english-pilot/main/install.sh |
+  ENGLISH_PILOT_VERSION=vX.Y.Z bash
 ```
 
-For now, source checkout is the canonical install path.
+Or use npm after the package is published:
+
+```bash
+npm install -g @octopusgarage/english-pilot
+english-pilot setup --yes
+```
+
+See [INSTALL.md](INSTALL.md) for the packaged install path. Source checkout is still the development path.
 
 ### First Run
 
 Check a prompt:
 
 ```bash
-node dist/src/bin/english-pilot.js check --text "I want to create a new project" --json
+english-pilot check --text "I want to create a new project" --json
 ```
 
 Install Claude Code or Codex integration:
 
 ```bash
-node dist/src/bin/english-pilot.js install claude --yes
-node dist/src/bin/english-pilot.js install codex --yes
+english-pilot install claude --yes
+english-pilot install codex --yes
 ```
 
 Start the MCP server:
 
 ```bash
-node dist/src/bin/english-pilot.js serve --mcp
+english-pilot serve --mcp
 ```
 
 Run local diagnostics:
 
 ```bash
-node dist/src/bin/english-pilot.js doctor --json
+english-pilot doctor --json
 ```
 
-Run the deterministic local smoke eval:
+For background services, put service-only environment variables in `~/.english-pilot/.env`, then restart the service:
 
 ```bash
-node dist/src/bin/english-pilot.js eval smoke --json
-node dist/src/bin/english-pilot.js eval prompts
+WHISPER_COMMAND=/absolute/path/to/english-pilot-stt-wrapper.py
+WECHAT_PROCESSING_ACK=on
 ```
+
+For voice setup, use [docs/voice-stt-install.md](docs/voice-stt-install.md). The short version is: Apple Silicon Macs should use `mlx-whisper`; Intel Macs should start with `whisper.cpp`.
+
+Run a quick local behavior check:
+
+```bash
+english-pilot eval smoke --json
+npm run smoke:mcp-stdio
+npm run eval:suite
+```
+
+See [Eval and Quality Gates](docs/eval-and-quality.md) for smoke coverage,
+AI-agent evals, Claude Code shortcuts, and CI behavior.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -196,15 +215,18 @@ node dist/src/bin/english-pilot.js eval prompts
 
 ### Hooks and MCP
 
-Claude Code and Codex hooks enforce blocking. MCP exposes optional tools the agent can call naturally during a session.
+Claude Code and Codex hooks enforce blocking before a prompt reaches the model. Their Stop hooks also capture the final assistant `English note` and store it in the normal review queue when it can be parsed. MCP exposes optional tools the agent can call naturally during a session.
 
 ```bash
 english-pilot install claude --yes
 english-pilot install codex --yes
+english-pilot mcp config --write --json
 english-pilot doctor --json
 ```
 
-The hook blocks prompts over the configured Chinese/non-English ratio. MCP and host guidance handle final-response coaching notes after the main task is complete; `force` mode asks agents to attach a compact teaching note whenever the prompt has Chinese fragments, awkward English, or an obvious everyday improvement.
+The submit hook blocks prompts over the configured Chinese/non-English ratio. MCP and host guidance ask agents to attach final-response coaching notes after the main task is complete; the Stop hook turns those notes into review items. `force` mode asks agents to attach a compact teaching note whenever the prompt has Chinese fragments, awkward English, or an obvious everyday improvement.
+
+For recap, lesson, speech, or review requests, agents can use `english_input_history`, `english_notes_history`, and `english_learning_brief` to read local prompt history and English notes before generating teaching content.
 
 ### Feishu/Lark
 
@@ -226,7 +248,7 @@ english-pilot wechat doctor --json
 english-pilot run
 ```
 
-WeChat uses QR-login long connection state under `~/.english-pilot/wechat/accounts/`. The channel runtime handles reconnect/session refresh and uses `/new` to clear the active local agent thread.
+WeChat uses QR-login long connection state under `~/.english-pilot/wechat/accounts/`. The channel runtime handles reconnect/session refresh and uses `/new` to clear the active local agent thread. Feishu and WeChat send `Received. Working on it...` before long Claude/Codex turns; set `WECHAT_PROCESSING_ACK=off` or `FEISHU_PROCESSING_ACK=off` to disable it.
 
 ### Managed Service
 
@@ -241,12 +263,15 @@ english-pilot service uninstall
 
 `english-pilot run` starts the daemon in the foreground. `service install` registers the built `dist` daemon with launchd on macOS or a user systemd service on Linux. On macOS, `service install-dev` installs a launchd service that points at this checkout and rebuilds on each restart, so local code changes go live with `english-pilot service restart`.
 
+Use `english-pilot daemon status` or `english-pilot doctor` to find `~/.english-pilot/logs/daemon.log`. It is JSONL and includes stable events for channel start, WeChat retry/recovery, session expiry, inbound messages, agent failures, and reply failures.
+
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Configuration
 
 Defaults:
 
+- `gateMode`: `enforce` blocks over-threshold prompts; `coach` never blocks but still analyzes, suggests, and records useful lessons
 - `maxChineseRatio`: `0.3`
 - `targetChineseRatio`: coaching target below the hard block threshold
 - `storage`: SQLite under `~/.english-pilot/english-pilot.sqlite`
@@ -260,6 +285,8 @@ english-pilot config profiles --json
 english-pilot config use beginner
 english-pilot config use balanced
 english-pilot config use force
+english-pilot config use coach
+english-pilot config set gateMode coach
 english-pilot config set externalAgentBackend claude
 english-pilot config set externalAgentBackend codex
 english-pilot config set externalAgentCwd /path/to/workspace
@@ -267,16 +294,7 @@ english-pilot config set externalAgentCwd /path/to/workspace
 
 Local state is stored under `~/.english-pilot` by default. Set `ENGLISH_PILOT_HOME` for tests or isolated runs.
 
-`eval smoke` uses a temporary EnglishPilot home directory, so it does not modify real config, prompt history, or review data. It verifies the language gate, force-mode coaching, Feishu/WeChat coaching prompt injection, and Codex dry-run command construction.
-
-For opt-in AI-backed checks, run:
-
-```bash
-node dist/src/bin/english-pilot.js eval agent --backend codex --case channel-weather --json
-node dist/src/bin/english-pilot.js eval agent --backend claude --case channel-weather --dry-run --json
-```
-
-Non-dry-run agent eval can invoke the real local Claude/Codex process and is intentionally not part of `project-health`.
+Eval details are documented in [Eval and Quality Gates](docs/eval-and-quality.md).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -288,22 +306,14 @@ npm run lint
 npm run typecheck
 npm test
 npm run smoke
+npm run smoke:mcp-stdio
+npm run eval:suite
 npm run project-health
 npm run verify
 ```
 
-Local and CI gates include:
-
-- ESLint and Prettier
-- TypeScript typecheck
-- Vitest coverage
-- deterministic smoke eval
-- shellcheck for scripts
-- dependency-cruiser
-- knip
-- gitleaks
-- CodeQL
-- weekly/on-demand mutation testing
+Use [Eval and Quality Gates](docs/eval-and-quality.md) for the detailed
+development, smoke, AI eval, and GitHub Actions workflow reference.
 
 See [PROJECT_PLAN.md](PROJECT_PLAN.md) for roadmap context.
 

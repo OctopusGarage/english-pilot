@@ -1,6 +1,7 @@
 import type { EnglishPilotConfig, EnglishPilotPolicy } from './types.js';
 
 export const defaultConfig: EnglishPilotConfig = {
+  gateMode: 'enforce',
   maxChineseRatio: 0.3,
   targetChineseRatio: 0.1,
   ratioProgression: 'manual',

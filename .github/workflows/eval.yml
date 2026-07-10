@@ -1,0 +1,43 @@
+name: Eval
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      backend:
+        description: 'Agent backend for manual eval'
+        required: false
+        default: 'both'
+        type: choice
+        options:
+          - both
+          - claude
+          - codex
+      real_agent:
+        description: 'Invoke real local Claude/Codex instead of dry-run'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Deterministic smoke and dry-run agent evals
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.real_agent != 'true' }}
+        run: scripts/eval-suite.sh --backend "${{ github.event.inputs.backend || 'both' }}"
+      - name: Real local agent eval
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.real_agent == 'true' }}
+        run: scripts/eval-suite.sh --backend "${{ github.event.inputs.backend || 'both' }}" --real-agent

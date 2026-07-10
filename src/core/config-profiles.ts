@@ -1,12 +1,13 @@
 import type { EnglishPilotConfig } from './types.js';
 import { loadConfig, saveConfig } from './config.js';
 
-export type ConfigProfileId = 'beginner' | 'balanced' | 'strict' | 'force';
+export type ConfigProfileId = 'beginner' | 'balanced' | 'strict' | 'force' | 'coach';
 
 export interface ConfigProfile {
   id: ConfigProfileId;
   label: string;
   description: string;
+  gateMode: EnglishPilotConfig['gateMode'];
   maxChineseRatio: number;
   targetChineseRatio: number;
   coachingIntensity: EnglishPilotConfig['coachingIntensity'];
@@ -17,6 +18,7 @@ export interface ConfigProfile {
 export interface ConfigProfileDifference {
   key: keyof Pick<
     EnglishPilotConfig,
+    | 'gateMode'
     | 'maxChineseRatio'
     | 'targetChineseRatio'
     | 'coachingIntensity'
@@ -38,6 +40,7 @@ export const configProfiles: ConfigProfile[] = [
     id: 'beginner',
     label: 'Beginner',
     description: 'Allow more Chinese while building the habit of English-leading prompts.',
+    gateMode: 'enforce',
     maxChineseRatio: 0.5,
     targetChineseRatio: 0.2,
     coachingIntensity: 'low',
@@ -48,6 +51,7 @@ export const configProfiles: ConfigProfile[] = [
     id: 'balanced',
     label: 'Balanced',
     description: 'Default first-version balance: English-dominant prompts with occasional coaching.',
+    gateMode: 'enforce',
     maxChineseRatio: 0.3,
     targetChineseRatio: 0.1,
     coachingIntensity: 'medium',
@@ -58,6 +62,7 @@ export const configProfiles: ConfigProfile[] = [
     id: 'strict',
     label: 'Strict',
     description: 'Push toward English-first prompts with more frequent coaching opportunities.',
+    gateMode: 'enforce',
     maxChineseRatio: 0.1,
     targetChineseRatio: 0.03,
     coachingIntensity: 'high',
@@ -69,8 +74,21 @@ export const configProfiles: ConfigProfile[] = [
     label: 'Force',
     description:
       'Maximum coaching pressure: allow only English-first prompts and surface a teaching note whenever useful.',
+    gateMode: 'enforce',
     maxChineseRatio: 0.1,
     targetChineseRatio: 0,
+    coachingIntensity: 'force',
+    coachingCooldownMinutes: 0,
+    maxInlineCoachingPerDay: 999,
+  },
+  {
+    id: 'coach',
+    label: 'Coach',
+    description:
+      'Non-blocking coaching mode: never blocks prompts, but still analyzes over-threshold input and records reviewable suggestions.',
+    gateMode: 'coach',
+    maxChineseRatio: 0.3,
+    targetChineseRatio: 0.1,
     coachingIntensity: 'force',
     coachingCooldownMinutes: 0,
     maxInlineCoachingPerDay: 999,
@@ -85,6 +103,7 @@ export function applyConfigProfile(profile: ConfigProfile): EnglishPilotConfig {
   const current = loadConfig();
   const next: EnglishPilotConfig = {
     ...current,
+    gateMode: profile.gateMode,
     maxChineseRatio: profile.maxChineseRatio,
     targetChineseRatio: profile.targetChineseRatio,
     coachingIntensity: profile.coachingIntensity,
@@ -117,6 +136,7 @@ export function formatConfigProfiles(profiles: ConfigProfile[]): string {
         [
           `${profile.id} - ${profile.label}`,
           `  ${profile.description}`,
+          `  gateMode: ${profile.gateMode}`,
           `  maxChineseRatio: ${profile.maxChineseRatio}`,
           `  targetChineseRatio: ${profile.targetChineseRatio}`,
           `  coachingIntensity: ${profile.coachingIntensity}`,
@@ -144,6 +164,7 @@ export function formatConfigProfileStatus(status: ConfigProfileStatus): string {
 
 function differencesForProfile(config: EnglishPilotConfig, profile: ConfigProfile): ConfigProfileDifference[] {
   const keys: ConfigProfileDifference['key'][] = [
+    'gateMode',
     'maxChineseRatio',
     'targetChineseRatio',
     'coachingIntensity',

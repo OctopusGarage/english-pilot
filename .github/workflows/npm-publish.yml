@@ -3,6 +3,14 @@ name: Publish to npm
 on:
   workflow_dispatch:
     inputs:
+      operation:
+        description: 'Operation to run'
+        required: false
+        default: 'publish'
+        type: choice
+        options:
+          - publish
+          - access-public
       ref:
         description: 'Tag or ref to publish (blank = default branch)'
         required: false
@@ -33,7 +41,13 @@ jobs:
             | tar -xz gitleaks
           sudo mv gitleaks /usr/local/bin/gitleaks
       - run: npm ci
-      - run: npm run verify
-      - run: npm publish --provenance
+      - if: ${{ github.event.inputs.operation == 'publish' }}
+        run: npm run verify
+      - if: ${{ github.event.inputs.operation == 'publish' }}
+        run: npm publish --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - if: ${{ github.event.inputs.operation == 'access-public' }}
+        run: npm access set status=public @octopusgarage/english-pilot
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

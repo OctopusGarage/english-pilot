@@ -152,6 +152,7 @@ export function applyRatioProgressionSuggestion(
 
   const nextConfig: EnglishPilotConfig = {
     ...config,
+    gateMode: targetProfile.gateMode,
     maxChineseRatio: targetProfile.maxChineseRatio,
     targetChineseRatio: targetProfile.targetChineseRatio,
     coachingIntensity: targetProfile.coachingIntensity,

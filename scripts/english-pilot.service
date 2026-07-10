@@ -5,6 +5,7 @@ After=network-online.target
 [Service]
 Type=simple
 Environment=ENGLISH_PILOT_HOME=__HOME__/.english-pilot
+EnvironmentFile=-__HOME__/.english-pilot/.env
 ExecStart=__NODE_BIN__ __CLI_JS__ run
 Restart=on-failure
 RestartSec=5

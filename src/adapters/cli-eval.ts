@@ -1,5 +1,5 @@
-import { runAgentEval, formatAgentEvalReport, type AgentEvalCaseId } from '../eval/agent.js';
-import { formatSmokeEvalPrompts, formatSmokeEvalReport, runSmokeEval } from '../eval/smoke.js';
+import { runAgentEval, formatAgentEvalReport, type AgentEvalCaseId } from '../eval/agent-eval-runner.js';
+import { formatSmokeEvalPrompts, formatSmokeEvalReport, runSmokeEval } from '../eval/smoke-eval-runner.js';
 import type { ExternalAgentBackend } from '../agent/runner.js';
 import type { CliResult } from './cli-types.js';
 
@@ -26,7 +26,7 @@ export function runEval(args: string[]): CliResult {
     exitCode: 1,
     stdout: '',
     stderr:
-      'Usage: english-pilot eval smoke [--json] | eval prompts | eval agent --backend claude|codex [--case channel-weather] [--dry-run] [--json]\n',
+      'Usage: english-pilot eval smoke [--json] | eval prompts | eval agent --backend claude|codex [--case channel-weather|history-lesson] [--dry-run] [--json]\n',
   };
 }
 
@@ -90,7 +90,8 @@ function parseBackend(value: string | undefined): ExternalAgentBackend {
 
 function parseCaseId(value: string | undefined): AgentEvalCaseId {
   if (value === undefined || value === 'channel-weather') return 'channel-weather';
-  throw new Error('--case must be: channel-weather.');
+  if (value === 'history-lesson') return 'history-lesson';
+  throw new Error('--case must be one of: channel-weather, history-lesson.');
 }
 
 function parseOptionalPositiveInteger(value: string | undefined, name: string): number | undefined {

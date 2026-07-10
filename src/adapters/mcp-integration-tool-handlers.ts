@@ -29,7 +29,7 @@ import {
   requireString,
   requireText,
 } from './mcp-tool-arguments.js';
-import type { EnglishPilotMcpToolName } from './mcp-tool-registry.js';
+import type { McpToolName } from './mcp-tool-types.js';
 import { allowedGlossaryTerms } from './mcp-language-tool-handlers.js';
 
 export interface McpIntegrationAsyncOptions {
@@ -38,7 +38,7 @@ export interface McpIntegrationAsyncOptions {
 }
 
 export function handleIntegrationMcpTool(
-  name: EnglishPilotMcpToolName,
+  name: McpToolName,
   args: Record<string, unknown>,
 ): Record<string, unknown> | undefined {
   switch (name) {
@@ -138,7 +138,7 @@ export function handleIntegrationMcpTool(
 }
 
 export async function handleIntegrationMcpToolAsync(
-  name: EnglishPilotMcpToolName,
+  name: McpToolName,
   args: Record<string, unknown>,
   options: McpIntegrationAsyncOptions = {},
 ): Promise<Record<string, unknown> | undefined> {

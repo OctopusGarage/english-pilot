@@ -11,6 +11,7 @@ export interface CodexInstallPlan {
     args: string[];
   };
   statusMessage: string;
+  stopStatusMessage: string;
 }
 
 interface CodexCommandHook {
@@ -36,6 +37,7 @@ export function createCodexInstallPlan(
     hookCommand,
     mcpServerConfig,
     statusMessage: 'Checking English policy',
+    stopStatusMessage: 'Recording English note',
   };
 }
 
@@ -49,21 +51,12 @@ export function installCodexHook(plan: CodexInstallPlan): void {
   const userPromptSubmit = Array.isArray(hooks.UserPromptSubmit)
     ? hooks.UserPromptSubmit.filter(isCodexMatcherGroup)
     : [];
+  const stop = Array.isArray(hooks.Stop) ? hooks.Stop.filter(isCodexMatcherGroup) : [];
 
   config.hooks = {
     ...hooks,
-    UserPromptSubmit: [
-      ...removeEnglishPilotGroups(userPromptSubmit, plan),
-      {
-        hooks: [
-          {
-            type: 'command',
-            command: plan.hookCommand,
-            statusMessage: plan.statusMessage,
-          },
-        ],
-      },
-    ],
+    UserPromptSubmit: [...removeEnglishPilotGroups(userPromptSubmit, plan), codexHookGroup(plan, plan.statusMessage)],
+    Stop: [...removeEnglishPilotGroups(stop, plan), codexHookGroup(plan, plan.stopStatusMessage)],
   };
 
   mkdirSync(dirname(plan.hooksConfigPath), { recursive: true });
@@ -84,12 +77,19 @@ export function uninstallCodexHook(plan: CodexInstallPlan): boolean {
     ? config.hooks.UserPromptSubmit.filter(isCodexMatcherGroup)
     : [];
   const nextGroups = removeEnglishPilotGroups(groups, plan);
-  const removed = nextGroups.length !== groups.length;
+  const stopGroups = Array.isArray(config.hooks.Stop) ? config.hooks.Stop.filter(isCodexMatcherGroup) : [];
+  const nextStopGroups = removeEnglishPilotGroups(stopGroups, plan);
+  const removed = nextGroups.length !== groups.length || nextStopGroups.length !== stopGroups.length;
 
   if (nextGroups.length > 0) {
     config.hooks.UserPromptSubmit = nextGroups;
   } else {
     delete config.hooks.UserPromptSubmit;
+  }
+  if (nextStopGroups.length > 0) {
+    config.hooks.Stop = nextStopGroups;
+  } else {
+    delete config.hooks.Stop;
   }
 
   if (Object.keys(config.hooks).length === 0) {
@@ -113,17 +113,8 @@ export function formatCodexInstallDryRun(plan: CodexInstallPlan): string {
     JSON.stringify(
       {
         hooks: {
-          UserPromptSubmit: [
-            {
-              hooks: [
-                {
-                  type: 'command',
-                  command: plan.hookCommand,
-                  statusMessage: plan.statusMessage,
-                },
-              ],
-            },
-          ],
+          UserPromptSubmit: [codexHookGroup(plan, plan.statusMessage)],
+          Stop: [codexHookGroup(plan, plan.stopStatusMessage)],
         },
       },
       null,
@@ -143,6 +134,18 @@ const CODEX_MCP_BLOCK_START = '# BEGIN EnglishPilot MCP';
 const CODEX_MCP_BLOCK_END = '# END EnglishPilot MCP';
 const CODEX_GUIDANCE_BLOCK_START = '<!-- ENGLISH_PILOT_GUIDANCE_START -->';
 const CODEX_GUIDANCE_BLOCK_END = '<!-- ENGLISH_PILOT_GUIDANCE_END -->';
+
+function codexHookGroup(plan: CodexInstallPlan, statusMessage: string): CodexMatcherGroup {
+  return {
+    hooks: [
+      {
+        type: 'command',
+        command: plan.hookCommand,
+        statusMessage,
+      },
+    ],
+  };
+}
 
 function writeCodexMcpConfig(plan: CodexInstallPlan): void {
   const existing = existsSync(plan.configPath) ? readFileSync(plan.configPath, 'utf8') : '';
@@ -222,6 +225,7 @@ function codexGuidanceBlock(): string {
     '',
     'Keep it elegant and professional: 1-3 short lines, practical workplace English, no lecture, no interruption before the main answer.',
     'When the english-pilot MCP server is available, use `english_coaching_context`, `english_rewrite_text`, and `english_pronounce_text` for structured help.',
+    'When the user asks for a recap, lesson, speech, or review based on their history, use `english_learning_brief`, `english_input_history`, or `english_notes_history` before answering.',
     'Do not add an English note for prompts blocked by the EnglishPilot hook.',
     CODEX_GUIDANCE_BLOCK_END,
   ].join('\n');

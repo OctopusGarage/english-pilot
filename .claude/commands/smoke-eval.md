@@ -8,6 +8,8 @@ Run the local EnglishPilot smoke eval for this repo. This command is a thin
 Claude shortcut over the deterministic CLI eval; do not duplicate eval logic in
 the prompt.
 
+Reference: `docs/eval-and-quality.md`.
+
 For opt-in real Claude/Codex behavior checks, use `/agent-eval` instead.
 
 Argument: `$ARGUMENTS`
@@ -27,6 +29,7 @@ Do this:
 
    ```bash
    npm run smoke:json
+   npm run smoke:mcp-stdio
    ```
 
 4. Parse the JSON output. Report:
@@ -38,10 +41,11 @@ Do this:
 5. If a case fails, do not guess. Run the narrow related test first, then inspect
    the failing path:
 
-   - gate cases: `npm test -- --run tests/smoke-eval.test.ts tests/analyze.test.ts tests/coaching.test.ts`
-   - channel coaching cases: `npm test -- --run tests/smoke-eval.test.ts tests/feishu-channel.test.ts tests/wechat-channel.test.ts`
-   - agent dry-run cases: `npm test -- --run tests/smoke-eval.test.ts tests/agent-runner.test.ts`
+   - gate cases: `npm test -- --run tests/eval/smoke-eval.test.ts tests/unit/analyze.test.ts tests/integration/coaching.test.ts`
+   - channel coaching cases: `npm test -- --run tests/eval/smoke-eval.test.ts tests/integration/feishu-channel.test.ts tests/integration/wechat-channel.test.ts`
+   - agent dry-run cases: `npm test -- --run tests/eval/smoke-eval.test.ts tests/integration/agent-runner.test.ts`
+   - MCP stdio cases: `npm run build && npm run smoke:mcp-stdio`
 
 6. Keep the final report concise. Mention that the smoke eval uses a temporary
-   EnglishPilot home directory and does not call real Claude, Codex, Feishu, or
-   WeChat.
+   EnglishPilot home directory, the MCP stdio smoke starts a local child
+   process, and neither check calls real Claude, Codex, Feishu, or WeChat.

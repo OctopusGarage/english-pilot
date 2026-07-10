@@ -22,9 +22,10 @@ export function buildPromptAssessment(input: {
   allowedTerms?: string[];
   promptEvents?: PromptEventForCoaching[];
 }): PromptAssessment {
-  const analysis = analyzeText(input.text, input.config, input.allowedTerms ?? []);
+  const rawAnalysis = analyzeText(input.text, input.config, input.allowedTerms ?? []);
+  const analysis = applyGateMode(rawAnalysis, input.config);
   const rewrite =
-    analysis.decision === 'BLOCK' && input.config.blockWithRewrite ? suggestRewrite(input.text) : undefined;
+    rawAnalysis.decision === 'BLOCK' && input.config.blockWithRewrite ? suggestRewrite(input.text) : undefined;
   const lesson = extractLesson(input.text);
   const coachingNote =
     input.promptEvents !== undefined
@@ -42,6 +43,16 @@ export function buildPromptAssessment(input: {
     lesson,
     shouldRecordLearningPrompt: analysis.nonEnglishCount > 0 && isAutoRecordableLearningPrompt(analysis),
     ...(coachingNote ? { coachingNote } : {}),
+  };
+}
+
+function applyGateMode(analysis: AnalysisResult, config: EnglishPilotConfig): AnalysisResult {
+  if (config.gateMode !== 'coach' || analysis.decision !== 'BLOCK') return analysis;
+  return {
+    ...analysis,
+    decision: 'ALLOW_WITH_COACHING',
+    reason: `Coach mode is enabled; ${analysis.reason}`,
+    coachingSignals: [...new Set([...(analysis.coachingSignals ?? []), 'coach-mode-over-threshold'])],
   };
 }
 

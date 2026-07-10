@@ -48,12 +48,13 @@ The channel flow should be:
 
 1. Normalize the incoming message into text plus channel metadata.
 2. Run EnglishPilot threshold analysis.
-3. If over the threshold, reply with the copyable English rewrite and do not call the agent.
-4. If allowed, optionally record a learning item.
+3. In `gateMode=enforce`, if over the threshold, reply with the copyable English rewrite and do not call the agent.
+4. In `gateMode=coach`, downgrade the over-threshold result to coaching, optionally record a learning item, and continue the normal agent flow.
 5. If `externalAgentBackend` is configured, build a structured prompt and call `AgentRunner`.
-6. Reply with the agent output.
+6. Parse the agent output for the last compact `English note` and record it into the review queue when possible.
+7. Reply with the agent output.
 
-When an allowed message is still teachable, the channel runtime passes one coaching instruction into the same agent turn. The local agent should finish the main reply first, then append one compact `English note` with a better expression, a short rationale, and IPA when useful.
+When an allowed message is still teachable, the channel runtime passes one coaching instruction into the same agent turn. The local agent should finish the main reply first, then append one compact `English note` with a better expression, a short rationale, and IPA when useful. The channel runtime owns the agent reply, so it records the final note directly instead of relying on Claude Code or Codex Stop hooks.
 
 ## Backend Configuration
 

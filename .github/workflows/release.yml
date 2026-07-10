@@ -38,7 +38,7 @@ jobs:
           npm ci
           npm run verify
           mkdir -p dist-release
-          PACKED="$(npm pack --pack-destination dist-release)"
+          PACKED="$(npm pack --pack-destination dist-release --silent | tail -n 1)"
           mv "dist-release/${PACKED}" "dist-release/english-pilot-${GITHUB_REF_NAME}.tgz"
 
       - name: Create GitHub Release
@@ -62,14 +62,37 @@ jobs:
             echo
             echo "## Install"
             echo
+            echo "Install or update with the packaged installer:"
+            echo
             echo '```bash'
-            echo "npm install -g https://github.com/${REPO}/releases/download/${TAG}/english-pilot-${TAG}.tgz"
+            echo "curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | bash"
             echo '```'
             echo
-            echo "Or install from npm after the manual npm publish workflow has run:"
+            echo "Pin this release:"
             echo
             echo '```bash'
-            echo "npm install -g english-pilot"
+            echo "curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | \\"
+            echo "  ENGLISH_PILOT_VERSION=${TAG} bash"
+            echo '```'
+            echo
+            echo "Or install from npm after the npm publish workflow has run:"
+            echo
+            echo '```bash'
+            echo "npm install -g @octopusgarage/english-pilot"
+            echo "english-pilot setup --yes"
+            echo '```'
+            echo
+            echo "Next:"
+            echo
+            echo '```bash'
+            echo "english-pilot wechat setup"
+            echo "english-pilot service install"
+            echo '```'
+            echo
+            echo "AI assistant prompt:"
+            echo
+            echo '```text'
+            echo "Install or update EnglishPilot from this release, run english-pilot setup --yes, then show me the next WeChat/service commands."
             echo '```'
             echo
             echo "## Verify the signature"
