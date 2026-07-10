@@ -15,7 +15,7 @@
     <key>ENGLISH_PILOT_HOME</key>
     <string>__HOME__/.english-pilot</string>
     <key>PATH</key>
-    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <string>__SERVICE_PATH__</string>
   </dict>
   <key>RunAtLoad</key>
   <true/>

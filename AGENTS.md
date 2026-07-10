@@ -56,3 +56,15 @@ scripts/eval-suite.sh --backend both
 Use `--real-agent` only when the user explicitly asks to invoke real local
 Claude/Codex. The default suite runs deterministic smoke, MCP stdio smoke, and
 Claude/Codex dry-run agent evals for all catalogued eval cases.
+
+When the user asks to update a remote installed machine, use
+`/update-remote-install` or run:
+
+```bash
+scripts/update-remote-install.sh <user@host> <version>
+```
+
+For the known Intel Mac test machine, the usual target is
+`ys-aquria@mac2015.local`. Do not install under a different remote user just
+because that user can SSH in; EnglishPilot runtime state is user-scoped under
+`~/.english-pilot`.

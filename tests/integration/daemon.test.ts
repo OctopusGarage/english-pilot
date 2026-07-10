@@ -1,4 +1,5 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -202,6 +203,90 @@ describe('daemon runtime infrastructure', () => {
     });
   });
 
+  it('terminates an existing daemon lock holder before kickstarting launchd restart', async () => {
+    const fakeBin = join(home, 'fake-bin');
+    const calls = join(home, 'calls.log');
+    const layout = ensureRuntimeLayout();
+    const daemon = spawn(process.execPath, ['-e', 'setInterval(() => undefined, 1000)'], {
+      stdio: 'ignore',
+    });
+    mkdirSync(fakeBin, { recursive: true });
+    writeFileSync(layout.instanceLockPath, JSON.stringify({ pid: daemon.pid, acquiredAt: '2026-07-10T00:00:00.000Z' }));
+
+    writeExecutable(join(fakeBin, 'uname'), ['#!/bin/sh', 'echo Darwin', ''].join('\n'));
+    writeExecutable(
+      join(fakeBin, 'id'),
+      ['#!/bin/sh', 'if [ "$1" = "-u" ]; then echo 501; else /usr/bin/id "$@"; fi', ''].join('\n'),
+    );
+    writeExecutable(
+      join(fakeBin, 'ps'),
+      [
+        '#!/bin/sh',
+        'echo "node /tmp/node_modules/@octopusgarage/english-pilot/dist/src/bin/english-pilot.js run"',
+        '',
+      ].join('\n'),
+    );
+    writeExecutable(join(fakeBin, 'sleep'), ['#!/bin/sh', 'exit 0', ''].join('\n'));
+    writeExecutable(
+      join(fakeBin, 'launchctl'),
+      ['#!/bin/sh', 'echo "launchctl $*" >> "$CALLS"', 'exit 0', ''].join('\n'),
+    );
+
+    try {
+      const result = spawnSync('sh', ['scripts/service.sh', 'restart'], {
+        cwd: process.cwd(),
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          HOME: home,
+          ENGLISH_PILOT_HOME: home,
+          PATH: `${fakeBin}:${process.env.PATH ?? ''}`,
+          CALLS: calls,
+        },
+      });
+
+      expect(result).toMatchObject({ status: 0 });
+      expect(result.stdout).toContain(`Stopping existing EnglishPilot daemon pid ${daemon.pid}.`);
+      await expectProcessToExit(daemon.pid);
+      expect(readFileSync(calls, 'utf8').trim().split('\n')).toEqual([
+        'launchctl kickstart -k gui/501/com.octopusgarage.english-pilot',
+      ]);
+    } finally {
+      if (daemon.pid !== undefined && isProcessAliveForTest(daemon.pid)) daemon.kill('SIGKILL');
+    }
+  });
+
+  it('includes the active Node bin directory in generated launchd service PATH', () => {
+    const fakeBin = join(home, 'fake-node-bin');
+    const calls = join(home, 'launchctl-calls.log');
+    mkdirSync(fakeBin, { recursive: true });
+    writeExecutable(join(fakeBin, 'node'), ['#!/bin/sh', 'echo fake-node "$@"', ''].join('\n'));
+    writeExecutable(join(fakeBin, 'npm'), ['#!/bin/sh', 'echo fake-npm "$@"', ''].join('\n'));
+    writeExecutable(join(fakeBin, 'launchctl'), ['#!/bin/sh', 'echo "$*" >> "$CALLS"', 'exit 0', ''].join('\n'));
+    writeExecutable(
+      join(fakeBin, 'id'),
+      ['#!/bin/sh', 'if [ "$1" = "-u" ]; then echo 501; else /usr/bin/id "$@"; fi', ''].join('\n'),
+    );
+
+    const result = spawnSync('sh', ['scripts/install-launchd.sh'], {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        HOME: home,
+        PATH: `${fakeBin}:${process.env.PATH ?? ''}`,
+        CALLS: calls,
+      },
+    });
+
+    expect(result).toMatchObject({ status: 0 });
+    const plist = readFileSync(join(home, 'Library', 'LaunchAgents', 'com.octopusgarage.english-pilot.plist'), 'utf8');
+    expect(plist).toContain(
+      `<string>${fakeBin}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>`,
+    );
+    expect(readFileSync(calls, 'utf8')).toContain('bootstrap gui/501');
+  });
+
   it('includes daemon runtime paths in doctor output', () => {
     const layout = ensureRuntimeLayout();
     writeFileSync(
@@ -227,3 +312,26 @@ describe('daemon runtime infrastructure', () => {
     expect(readFileSync(layout.runningMarkerPath, 'utf8')).toContain('2026-07-09T00:00:00.000Z');
   });
 });
+
+function writeExecutable(path: string, content: string): void {
+  writeFileSync(path, content, 'utf8');
+  chmodSync(path, 0o755);
+}
+
+async function expectProcessToExit(pid: number | undefined): Promise<void> {
+  expect(pid).toEqual(expect.any(Number));
+  for (let index = 0; index < 20; index += 1) {
+    if (!isProcessAliveForTest(pid!)) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`Process ${pid} is still alive.`);
+}
+
+function isProcessAliveForTest(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
