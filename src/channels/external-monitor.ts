@@ -33,7 +33,7 @@ export function monitorExternalChannelText(input: ExternalChannelTextMonitorInpu
 
   recordPromptEvent(input.source, input.text, analysis, { coachingShown: shouldReply });
   const item = recordChannelLesson(input, assessment);
-  const agentCoachingInstruction = buildAgentCoachingInstruction(input, assessment);
+  const agentCoachingInstruction = buildAgentCoachingInstruction(assessment);
   return {
     decision: analysis.decision,
     shouldReply,
@@ -78,15 +78,10 @@ function buildReplyText(
   return ['English note:', '', quote].join('\n');
 }
 
-function buildAgentCoachingInstruction(
-  input: ExternalChannelTextMonitorInput,
-  assessment: PromptAssessment,
-): string | undefined {
+function buildAgentCoachingInstruction(assessment: PromptAssessment): string | undefined {
   if (assessment.analysis.decision === 'BLOCK') return undefined;
   const shouldCoach =
-    assessment.analysis.decision === 'ALLOW_WITH_COACHING' ||
-    input.replyMode === 'always' ||
-    (assessment.analysis.coachingSignals?.length ?? 0) > 0;
+    assessment.analysis.decision === 'ALLOW_WITH_COACHING' || (assessment.analysis.coachingSignals?.length ?? 0) > 0;
   if (!shouldCoach) return undefined;
 
   const ipa = assessment.lesson.ipa
