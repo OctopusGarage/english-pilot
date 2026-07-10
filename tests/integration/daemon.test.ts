@@ -203,6 +203,14 @@ describe('daemon runtime infrastructure', () => {
     });
   });
 
+  it('runs dev services through the source watcher supervisor', () => {
+    const wrapper = readFileSync('scripts/dev-launchd-wrapper.sh', 'utf8');
+
+    expect(wrapper).toContain('dev-supervisor.mjs');
+    expect(wrapper).not.toContain('npm run build');
+    expect(wrapper).not.toContain('exec "$NODE_BIN" "$CLI_JS" run');
+  });
+
   it('terminates an existing daemon lock holder before kickstarting launchd restart', async () => {
     const fakeBin = join(home, 'fake-bin');
     const calls = join(home, 'calls.log');

@@ -261,7 +261,7 @@ english-pilot service restart
 english-pilot service uninstall
 ```
 
-`english-pilot run` starts the daemon in the foreground. `service install` registers the built `dist` daemon with launchd on macOS or a user systemd service on Linux. On macOS, `service install-dev` installs a launchd service that points at this checkout and rebuilds on each restart, so local code changes go live with `english-pilot service restart`.
+`english-pilot run` starts the daemon in the foreground. `service install` registers the built `dist` daemon with launchd on macOS or a user systemd service on Linux. On macOS, `service install-dev` installs a launchd service that points at this checkout and runs a dev supervisor: it watches `src/`, rebuilds after changes, and reloads the daemon only after a clean build.
 
 Use `english-pilot daemon status` or `english-pilot doctor` to find `~/.english-pilot/logs/daemon.log`. It is JSONL and includes stable events for channel start, WeChat retry/recovery, session expiry, inbound messages, agent failures, and reply failures.
 

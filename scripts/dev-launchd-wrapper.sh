@@ -3,7 +3,6 @@ set -eu
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
 ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
-CLI_JS="$ROOT/dist/src/bin/english-pilot.js"
 
 for bin in \
   "$HOME"/.nvm/versions/node/*/bin \
@@ -18,7 +17,6 @@ done
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 export ENGLISH_PILOT_HOME="${ENGLISH_PILOT_HOME:-$HOME/.english-pilot}"
 NODE_BIN="$(command -v node)"
-NPM_BIN="$(command -v npm)"
 
 ENV_FILE="$ENGLISH_PILOT_HOME/.env"
 if [ -f "$ENV_FILE" ]; then
@@ -29,5 +27,4 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 cd "$ROOT"
-"$NPM_BIN" run build
-exec "$NODE_BIN" "$CLI_JS" run
+exec "$NODE_BIN" "$ROOT/scripts/dev-supervisor.mjs"

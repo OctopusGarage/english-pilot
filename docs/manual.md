@@ -212,7 +212,7 @@ node dist/src/bin/english-pilot.js service restart
 
 `run` starts one process that loads configured Feishu/Lark and WeChat channels, writes a running marker, holds an instance lock, and exposes a local Unix control socket at `~/.english-pilot/run/english-pilot.sock`. `daemon status` reads the running daemon through that socket when available and falls back to local marker inspection when it is stopped.
 
-`service install` registers the built `dist` daemon with launchd on macOS or a user systemd service on Linux. On macOS, `service install-dev` installs a launchd service that points at this checkout and runs `npm run build` on each service start before launching the daemon. Use it while developing or testing local channel code; after code changes, run `english-pilot service restart` to pick up the latest checkout. The service command is explicit; installing hooks or MCP servers does not automatically register a background process.
+`service install` registers the built `dist` daemon with launchd on macOS or a user systemd service on Linux. On macOS, `service install-dev` installs a launchd service that points at this checkout and runs a dev supervisor. The supervisor watches `src/`, runs `npm run build` after changes, reloads the daemon only after a clean build, and keeps the last-good daemon running when the build fails. The service command is explicit; installing hooks or MCP servers does not automatically register a background process.
 
 Remote npm-installed machines can be updated through the reusable helper:
 
