@@ -39,78 +39,116 @@ export async function runExternalChannelConversation(
   input: ExternalChannelConversationInput,
 ): Promise<ExternalChannelConversationResult> {
   if (isNewSessionCommand(input.text)) {
-    clearAgentSession(input.scope);
-    input.logger?.info('channel.session.new', 'External channel session was reset by /new.', logContext(input));
-    const sent = await input.sendText(newSessionReplyText());
-    logSendFailure(input, sent, '/new command');
-    return { handled: true, replied: sent.sent, reason: 'new-session' };
+    return handleNewSessionCommand(input);
   }
 
+  const monitorResult = assessChannelMessage(input);
+  if (monitorResult.decision !== 'BLOCK') {
+    return handleAllowedChannelMessage(input, monitorResult);
+  }
+
+  return handleBlockedOrSkippedChannelMessage(input, monitorResult);
+}
+
+function assessChannelMessage(input: ExternalChannelConversationInput): ExternalChannelTextMonitorResult {
   const monitorResult = input.monitorText();
   input.logger?.info('channel.message.assessed', 'External channel message was assessed.', {
     ...logContext(input),
     decision: monitorResult.decision,
     shouldReply: monitorResult.shouldReply,
   });
-  if (monitorResult.decision !== 'BLOCK') {
-    if (input.processingAckText && externalAgentEnabled()) {
-      const ack = await input.sendText(input.processingAckText);
-      logSendFailure(input, ack, 'processing ack');
-    }
-    const agentReply = await runExternalChannelAgentTurn({
-      channel: input.channel,
-      scope: input.scope,
-      text: input.text,
-      metadata: {
-        ...input.metadata,
-        inputKind: input.inputKind,
-        thresholdDecision: 'ALLOW',
-      },
-      coachingInstruction: monitorResult.agentCoachingInstruction,
-      runAgent: input.runAgent,
-      log: input.log,
-      logger: input.logger,
-      failureLabel: `${labelChannel(input.channel)} external agent for ${input.messageLabel}`,
-    });
-    if (agentReply.failed) {
-      input.logger?.warn(
-        'channel.agent.failed',
-        'External channel agent failed to produce a reply.',
-        logContext(input),
-      );
-      return { handled: true, replied: false, reason: 'agent-failed' };
-    }
-    if (agentReply.text) {
-      const note = extractLastAssistantEnglishNote(agentReply.text);
-      if (note) {
-        const item = recordAssistantEnglishNote(input.channel, note);
-        input.logger?.info('channel.assistant_note.recorded', 'Recorded assistant English note from channel reply.', {
-          ...logContext(input),
-          itemId: item.id,
-        });
-      }
-      const sent = await input.sendText(agentReply.text);
-      logSendFailure(input, sent, 'agent reply');
-      return { handled: true, replied: sent.sent };
-    }
+  return monitorResult;
+}
+
+async function handleNewSessionCommand(
+  input: ExternalChannelConversationInput,
+): Promise<ExternalChannelConversationResult> {
+  clearAgentSession(input.scope);
+  input.logger?.info('channel.session.new', 'External channel session was reset by /new.', logContext(input));
+  const sent = await sendChannelReply(input, newSessionReplyText(), '/new command');
+  return { handled: true, replied: sent.sent, reason: 'new-session' };
+}
+
+async function handleAllowedChannelMessage(
+  input: ExternalChannelConversationInput,
+  monitorResult: ExternalChannelTextMonitorResult,
+): Promise<ExternalChannelConversationResult> {
+  await sendProcessingAck(input);
+
+  const agentReply = await runExternalChannelAgentTurn({
+    channel: input.channel,
+    scope: input.scope,
+    text: input.text,
+    metadata: {
+      ...input.metadata,
+      inputKind: input.inputKind,
+      thresholdDecision: 'ALLOW',
+    },
+    coachingInstruction: monitorResult.agentCoachingInstruction,
+    runAgent: input.runAgent,
+    log: input.log,
+    logger: input.logger,
+    failureLabel: `${labelChannel(input.channel)} external agent for ${input.messageLabel}`,
+  });
+
+  if (agentReply.failed) {
+    input.logger?.warn('channel.agent.failed', 'External channel agent failed to produce a reply.', logContext(input));
+    return { handled: true, replied: false, reason: 'agent-failed' };
+  }
+  if (!agentReply.text) {
+    return handleSkippedReply(input);
   }
 
+  recordAssistantNoteFromReply(input, agentReply.text);
+  const sent = await sendChannelReply(input, agentReply.text, 'agent reply');
+  return { handled: true, replied: sent.sent };
+}
+
+async function handleBlockedOrSkippedChannelMessage(
+  input: ExternalChannelConversationInput,
+  monitorResult: ExternalChannelTextMonitorResult,
+): Promise<ExternalChannelConversationResult> {
   if (!monitorResult.shouldReply || !monitorResult.replyText) {
-    input.logger?.info(
-      'channel.reply.skipped',
-      'External channel reply was skipped by reply policy.',
-      logContext(input),
-    );
-    return { handled: true, replied: false };
+    return handleSkippedReply(input);
   }
   input.logger?.info(
     'channel.message.blocked',
     'External channel message was blocked by the language gate.',
     logContext(input),
   );
-  const sent = await input.sendText(monitorResult.replyText);
-  logSendFailure(input, sent, 'coaching reply');
+  const sent = await sendChannelReply(input, monitorResult.replyText, 'coaching reply');
   return { handled: true, replied: sent.sent };
+}
+
+async function sendProcessingAck(input: ExternalChannelConversationInput): Promise<void> {
+  if (!input.processingAckText || !externalAgentEnabled()) return;
+  await sendChannelReply(input, input.processingAckText, 'processing ack');
+}
+
+function handleSkippedReply(input: ExternalChannelConversationInput): ExternalChannelConversationResult {
+  input.logger?.info('channel.reply.skipped', 'External channel reply was skipped by reply policy.', logContext(input));
+  return { handled: true, replied: false };
+}
+
+function recordAssistantNoteFromReply(input: ExternalChannelConversationInput, replyText: string): void {
+  const note = extractLastAssistantEnglishNote(replyText);
+  if (!note) return;
+
+  const item = recordAssistantEnglishNote(input.channel, note);
+  input.logger?.info('channel.assistant_note.recorded', 'Recorded assistant English note from channel reply.', {
+    ...logContext(input),
+    itemId: item.id,
+  });
+}
+
+async function sendChannelReply(
+  input: ExternalChannelConversationInput,
+  text: string,
+  replyKind: string,
+): Promise<ExternalChannelSendTextResult> {
+  const sent = await input.sendText(text);
+  logSendFailure(input, sent, replyKind);
+  return sent;
 }
 
 function externalAgentEnabled(): boolean {

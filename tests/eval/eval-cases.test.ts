@@ -87,4 +87,33 @@ describe('eval case catalog', () => {
       ]),
     );
   });
+
+  it('accepts smart apostrophes in history-lesson weather corrections', () => {
+    const testCase = getAgentEvalCase('history-lesson');
+    const assertions = testCase.replyAssertions(
+      {
+        operation: 'external-agent-run',
+        backend: 'codex',
+        command: 'codex',
+        args: ['exec', '--json', '-'],
+        cwd: '.',
+        promptStdin: testCase.buildPrompt('codex'),
+        dryRun: false,
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+      },
+      [
+        'Corrected Expressions',
+        '1. “what is the weather about 广州” -> “What’s the weather like in Guangzhou?”',
+        '2. “I want to create a ne project” -> “I want to create a new project.”',
+        'IPA: weather /ˈweðər/, project /ˈprɑːdʒekt/.',
+        'Practice speech: Today I will create a new project and speak clearly.',
+      ].join('\n'),
+    );
+
+    expect(assertions).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'contains_history_weather_correction', passed: true })]),
+    );
+  });
 });

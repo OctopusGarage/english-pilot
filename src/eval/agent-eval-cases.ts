@@ -221,6 +221,7 @@ function classifyAgentFailure(run: ExternalAgentRunResult, replyText: string): s
 }
 
 function judgeHistoryLessonReply(run: ExternalAgentRunResult, replyText: string): AgentEvalAssertion[] {
+  const normalizedReplyText = normalizeEvalReplyText(replyText);
   return [
     {
       id: 'agent_exit_zero',
@@ -234,7 +235,7 @@ function judgeHistoryLessonReply(run: ExternalAgentRunResult, replyText: string)
     },
     {
       id: 'contains_history_weather_correction',
-      passed: /what(?:'s| is)\s+the\s+weather\s+like\s+in\s+Guangzhou/i.test(replyText),
+      passed: /what(?:'s| is)\s+the\s+weather\s+like\s+in\s+Guangzhou/i.test(normalizedReplyText),
       summary: 'The lesson uses the weather correction from the learning brief.',
     },
     {
@@ -258,4 +259,8 @@ function judgeHistoryLessonReply(run: ExternalAgentRunResult, replyText: string)
       summary: 'The reply includes a short practice speech.',
     },
   ];
+}
+
+function normalizeEvalReplyText(text: string): string {
+  return text.replace(/[‘’]/g, "'").replace(/[“”]/g, '"');
 }
