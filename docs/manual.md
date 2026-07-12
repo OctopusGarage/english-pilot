@@ -191,6 +191,20 @@ Allowed Feishu and WeChat messages send a short processing acknowledgement befor
 
 WeChat conversations automatically resume the last successful local agent thread for the same account, chat, sender, and cwd. Voice messages that already include a `voice_item.text` transcript are treated as voice input and routed to the same AgentRunner flow. The long-connection monitor catches transient update failures, backs off, and continues polling; session-expired responses trigger a refresh notification attempt plus setup guidance in logs.
 
+Outbound WeChat voice is not currently supported. Public iLink/OpenClaw protocol
+types expose `VOICE` / `voice_item`, but the public docs and official Tencent
+OpenClaw Weixin SDK do not confirm that a bot can reply to users with native
+WeChat voice bubbles. As of 2026-07-12, a live probe against the QR-login iLink
+bot channel successfully completed `getuploadurl` and CDN upload for short MP3
+and AMR-NB audio clips, but every `ilink/bot/sendmessage` request with a
+`type: 3` / `voice_item` payload returned `{"ret":-2}`. The same probe also
+confirmed that a `voice_item` without uploaded media is rejected. Treat this as
+a current WeChat/iLink bot channel limitation, not just a missing EnglishPilot
+helper. Re-check the platform before revisiting: future iLink/OpenClaw releases
+may expose outbound native voice bubbles, while sending audio as a file
+attachment may be a separate fallback path. See
+`docs/research/wechat-outbound-voice.md` for the source-backed note.
+
 Send `/new` in WeChat to clear the active session for the current conversation scope. The next message starts a fresh Claude/Codex conversation.
 
 `english-pilot wechat start` remains available for focused channel testing. Long-term usage should prefer the unified daemon.

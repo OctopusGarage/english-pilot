@@ -12,6 +12,7 @@ The command must be executable, accept the audio path as its first argument, and
 
 - Feishu/Lark voice messages are downloaded, transcribed with `WHISPER_COMMAND`, then routed through the same language gate and Claude/Codex agent flow as text.
 - WeChat voice messages are treated as voice input when the long-connection event already contains `voice_item.text`. Raw WeChat audio download plus local Whisper transcription is not implemented yet.
+- WeChat outbound native voice messages are not currently supported. Public iLink/OpenClaw protocol types expose `VOICE` / `voice_item`, but public docs and the official Tencent OpenClaw Weixin SDK do not confirm that bots can reply to users with native WeChat voice bubbles. A 2026-07-12 live probe completed iLink `getuploadurl` and CDN upload for short MP3 and AMR-NB clips, but `ilink/bot/sendmessage` rejected `type: 3` / `voice_item` payloads with `{"ret":-2}`. Re-test this before assuming the limitation still holds, because future WeChat/iLink bot behavior may change.
 
 ## Recommendation
 
