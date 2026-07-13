@@ -117,4 +117,46 @@ describe('analyzeText', () => {
     expect(result.decision).toBe('ALLOW_SILENT');
     expect(result.nonEnglishCount).toBe(0);
   });
+
+  it('ignores Chinese markdown block quotes when the user instruction is English', () => {
+    const result = analyzeText(
+      [
+        'Please review the requirement below and suggest a fix.',
+        '',
+        '> 这个规则太严格了。',
+        '> 当用户粘贴中文 issue 描述时，不应该把引用内容当成用户自己的表达。',
+      ].join('\n'),
+      defaultPolicy,
+    );
+
+    expect(result.decision).toBe('ALLOW_SILENT');
+    expect(result.nonEnglishCount).toBe(0);
+  });
+
+  it('ignores labeled pasted issue descriptions and logs when counting user writing', () => {
+    const result = analyzeText(
+      [
+        'Please fix the failure described below.',
+        '',
+        'Issue:',
+        '这个 hook 会误判粘贴过来的中文反馈。',
+        '用户只是要求修复，不是在用中文提问。',
+        '',
+        'Logs:',
+        '2026-07-13T10:21:33Z ERROR 请求失败：配置项缺失',
+        'at runHook (/tmp/project/src/hook.ts:42:13)',
+      ].join('\n'),
+      defaultPolicy,
+    );
+
+    expect(result.decision).toBe('ALLOW_SILENT');
+    expect(result.nonEnglishCount).toBe(0);
+  });
+
+  it('still blocks Chinese prompts that are merely wrapped in quotes', () => {
+    const result = analyzeText('"请帮我修复这个问题，顺便优化一下代码结构。"', defaultPolicy);
+
+    expect(result.decision).toBe('BLOCK');
+    expect(result.nonEnglishRatio).toBe(1);
+  });
 });

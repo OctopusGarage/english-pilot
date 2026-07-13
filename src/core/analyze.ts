@@ -1,6 +1,7 @@
 import type { AnalysisResult, EnglishPilotPolicy } from './types.js';
 
 const CODE_BLOCK_RE = /```[\s\S]*?```/g;
+const TILDE_CODE_BLOCK_RE = /~~~[\s\S]*?~~~/g;
 const INLINE_CODE_RE = /`[^`]*`/g;
 const MARKDOWN_LINK_RE = /\[[^\]]*]\([^)]*\)/g;
 const URL_RE = /https?:\/\/\S+/g;
@@ -9,10 +10,16 @@ const PATH_TOKEN_RE = /(?:(?:[A-Za-z]:)?[/~][^\s]+|(?:\.\.?\/)[^\s]+|[^\s]+\.[A-
 const ENGLISH_RE = /[A-Za-z]/g;
 const CJK_RE = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/g;
 const CJK_RUN_RE = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+/g;
+const REFERENCE_LABEL_RE =
+  /^\s{0,3}(?:issue|description|feedback|logs?|errors?|stack trace|trace|quoted text|original text|原文|反馈|日志|错误|问题|描述)\s*[:：]\s*$/i;
+const LOG_LINE_RE =
+  /^\s*(?:\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}|\[[^\]]*(?:error|warn|info|debug|trace)[^\]]*]|\b(?:ERROR|WARN|INFO|DEBUG|TRACE)\b|at\s+\S+\s+\()/i;
+const TRIPLE_QUOTE_BLOCK_RE = /("""|''')[\s\S]*?\1/g;
 
 export function sanitizeNarrative(text: string, policy: EnglishPilotPolicy): string {
   let sanitized = text
     .replace(CODE_BLOCK_RE, ' ')
+    .replace(TILDE_CODE_BLOCK_RE, ' ')
     .replace(INLINE_CODE_RE, ' ')
     .replace(MARKDOWN_LINK_RE, ' ')
     .replace(TAG_RE, ' ');
@@ -21,7 +28,7 @@ export function sanitizeNarrative(text: string, policy: EnglishPilotPolicy): str
     sanitized = sanitized.replace(URL_RE, ' ').replace(PATH_TOKEN_RE, ' ');
   }
 
-  return sanitized;
+  return stripReferencedMaterial(sanitized);
 }
 
 export function analyzeText(text: string, policy: EnglishPilotPolicy, allowedTerms: string[] = []): AnalysisResult {
@@ -134,6 +141,52 @@ function stripAllowedTerms(text: string, allowedTerms: string[]): string {
   }, text);
 }
 
+function stripReferencedMaterial(text: string): string {
+  const stripped = stripLineReferencedMaterial(text).replace(TRIPLE_QUOTE_BLOCK_RE, ' ');
+  return hasEnglishLetter(stripped) ? stripped : text;
+}
+
+function stripLineReferencedMaterial(text: string): string {
+  const lines = text.split('\n');
+  const stripped: string[] = [];
+  let skippingReferenceBlock = false;
+
+  for (const line of lines) {
+    if (isBlankLine(line)) {
+      skippingReferenceBlock = false;
+      stripped.push(line);
+      continue;
+    }
+
+    if (skippingReferenceBlock || isMarkdownBlockQuote(line) || isIndentedCodeLine(line) || LOG_LINE_RE.test(line)) {
+      stripped.push(' ');
+      continue;
+    }
+
+    if (REFERENCE_LABEL_RE.test(line)) {
+      skippingReferenceBlock = true;
+      stripped.push(' ');
+      continue;
+    }
+
+    stripped.push(line);
+  }
+
+  return stripped.join('\n');
+}
+
+function isBlankLine(line: string): boolean {
+  return line.trim().length === 0;
+}
+
+function isMarkdownBlockQuote(line: string): boolean {
+  return /^\s{0,3}>\s?/.test(line);
+}
+
+function isIndentedCodeLine(line: string): boolean {
+  return /^(?: {4}|\t)\S/.test(line);
+}
+
 function startsWithCjkNarrative(text: string): boolean {
   for (const char of text) {
     if (/[A-Za-z]/.test(char)) return false;
@@ -155,10 +208,14 @@ function stripShortCjkFragments(text: string, threshold: number): string {
 
 function collectIgnoredShortCjkFragments(text: string, threshold: number): string[] {
   if (threshold <= 0) return [];
-  if (!/[A-Za-z]/.test(text)) return [];
+  if (!hasEnglishLetter(text)) return [];
   const fragments = text.match(CJK_RUN_RE) ?? [];
   if (fragments.length !== 1) return [];
   return fragments.filter((fragment) => fragment.length < threshold);
+}
+
+function hasEnglishLetter(text: string): boolean {
+  return /[A-Za-z]/.test(text);
 }
 
 function hasAwkwardEnglish(text: string): boolean {
