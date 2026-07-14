@@ -52,6 +52,9 @@ describe('runCli', () => {
     expect(result.stdout).toContain(
       'english-pilot agent run --text "..." [--backend claude|codex] [--cwd <path>] [--dry-run] [--json]',
     );
+    expect(result.stdout).toContain(
+      'english-pilot gate disable (--repo-ignore|--global-ignore) [--cwd <path>] [--json]',
+    );
   });
 
   it('dry-runs a Claude external agent invocation from the CLI', async () => {
@@ -2245,6 +2248,174 @@ describe('runCli', () => {
       expect(json.item.pattern).toContain('Phoneme timing is available for precise articulation review.');
     } finally {
       restoreEnv(previous);
+    }
+  });
+
+  it('allows hook prompts when the current project is configured as disabled', () => {
+    const projectRoot = join(home, 'disabled-project');
+    const nestedProjectDir = join(projectRoot, 'src');
+    mkdirSync(nestedProjectDir, { recursive: true });
+    writeFileSync(
+      join(home, 'config.json'),
+      JSON.stringify(
+        {
+          maxChineseRatio: 0.1,
+          targetChineseRatio: 0.1,
+          disabledProjectPaths: [projectRoot],
+        },
+        null,
+        2,
+      ),
+      'utf8',
+    );
+    const previousCwd = process.cwd();
+
+    try {
+      process.chdir(nestedProjectDir);
+      const result = runCli(
+        ['hook', 'codex', '--stdin'],
+        JSON.stringify({ prompt: '帮我实现这个项目里的功能，不要问太多' }),
+      );
+
+      expect(result).toEqual({
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+      });
+    } finally {
+      process.chdir(previousCwd);
+    }
+  });
+
+  it('allows hook prompts when the project has a local gate hook opt-out file', () => {
+    const projectRoot = join(home, 'local-disabled-project');
+    const nestedProjectDir = join(projectRoot, 'src');
+    mkdirSync(nestedProjectDir, { recursive: true });
+    writeFileSync(join(projectRoot, '.english-pilot.json'), JSON.stringify({ gateHook: false }, null, 2), 'utf8');
+    writeFileSync(
+      join(home, 'config.json'),
+      JSON.stringify(
+        {
+          maxChineseRatio: 0.1,
+          targetChineseRatio: 0.1,
+        },
+        null,
+        2,
+      ),
+      'utf8',
+    );
+    const previousCwd = process.cwd();
+
+    try {
+      process.chdir(nestedProjectDir);
+      const result = runCli(
+        ['hook', 'codex', '--stdin'],
+        JSON.stringify({ prompt: '帮我实现这个项目里的功能，不要问太多' }),
+      );
+
+      expect(result).toEqual({
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+      });
+    } finally {
+      process.chdir(previousCwd);
+    }
+  });
+
+  it('disables the gate hook and adds the opt-out file to repo-local git excludes', () => {
+    const projectRoot = join(home, 'repo-local-ignore-project');
+    const nestedProjectDir = join(projectRoot, 'src');
+    mkdirSync(join(projectRoot, '.git', 'info'), { recursive: true });
+    mkdirSync(nestedProjectDir, { recursive: true });
+
+    const result = runCli(['gate', 'disable', '--cwd', nestedProjectDir, '--repo-ignore', '--json']);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      operation: 'gate-disable',
+      projectRoot,
+      projectConfigPath: join(projectRoot, '.english-pilot.json'),
+      ignore: {
+        mode: 'repo',
+        path: join(projectRoot, '.git', 'info', 'exclude'),
+      },
+    });
+    expect(JSON.parse(readFileSync(join(projectRoot, '.english-pilot.json'), 'utf8'))).toEqual({
+      gateHook: false,
+    });
+    expect(readFileSync(join(projectRoot, '.git', 'info', 'exclude'), 'utf8')).toContain('.english-pilot.json\n');
+    expect(existsSync(join(projectRoot, '.gitignore'))).toBe(false);
+  });
+
+  it('disables the gate hook and adds the opt-out file to the configured global git ignore', () => {
+    const projectRoot = join(home, 'global-ignore-project');
+    const nestedProjectDir = join(projectRoot, 'src');
+    const globalGitConfigPath = join(home, 'gitconfig');
+    const globalIgnorePath = join(home, 'global-git-ignore');
+    const previousGlobalGitConfig = process.env.GIT_CONFIG_GLOBAL;
+    mkdirSync(join(projectRoot, '.git', 'info'), { recursive: true });
+    mkdirSync(nestedProjectDir, { recursive: true });
+    writeFileSync(globalGitConfigPath, `[core]\n\texcludesFile = ${globalIgnorePath}\n`, 'utf8');
+    process.env.GIT_CONFIG_GLOBAL = globalGitConfigPath;
+
+    try {
+      const result = runCli(['gate', 'disable', '--cwd', nestedProjectDir, '--global-ignore', '--json']);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toBe('');
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        operation: 'gate-disable',
+        projectRoot,
+        projectConfigPath: join(projectRoot, '.english-pilot.json'),
+        ignore: {
+          mode: 'global',
+          path: globalIgnorePath,
+        },
+      });
+      expect(JSON.parse(readFileSync(join(projectRoot, '.english-pilot.json'), 'utf8'))).toEqual({
+        gateHook: false,
+      });
+      expect(readFileSync(globalIgnorePath, 'utf8')).toContain('.english-pilot.json\n');
+      expect(existsSync(join(projectRoot, '.gitignore'))).toBe(false);
+    } finally {
+      restoreEnv({ GIT_CONFIG_GLOBAL: previousGlobalGitConfig });
+    }
+  });
+
+  it('still blocks hook prompts when the current project is not disabled', () => {
+    const disabledProject = join(home, 'disabled-project');
+    const activeProject = join(home, 'active-project');
+    mkdirSync(activeProject, { recursive: true });
+    writeFileSync(
+      join(home, 'config.json'),
+      JSON.stringify(
+        {
+          maxChineseRatio: 0.1,
+          targetChineseRatio: 0.1,
+          disabledProjectPaths: [disabledProject],
+        },
+        null,
+        2,
+      ),
+      'utf8',
+    );
+    const previousCwd = process.cwd();
+
+    try {
+      process.chdir(activeProject);
+      const result = runCli(
+        ['hook', 'codex', '--stdin'],
+        JSON.stringify({ prompt: '帮我实现这个项目里的功能，不要问太多' }),
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        decision: 'block',
+      });
+    } finally {
+      process.chdir(previousCwd);
     }
   });
 

@@ -226,6 +226,10 @@ function isConfigKey(key: string): key is keyof EnglishPilotConfig {
 
 function parseConfigValue<K extends keyof EnglishPilotConfig>(key: K, value: string): EnglishPilotConfig[K] {
   const current = defaultConfig[key];
+  if (Array.isArray(current)) {
+    return parseStringListConfigValue(key, value) as EnglishPilotConfig[K];
+  }
+
   if (typeof current === 'number') {
     const numeric = Number(value);
     if (!Number.isFinite(numeric)) {
@@ -241,6 +245,22 @@ function parseConfigValue<K extends keyof EnglishPilotConfig>(key: K, value: str
   }
 
   return parseStringConfigValue(key, value);
+}
+
+function parseStringListConfigValue<K extends keyof EnglishPilotConfig>(key: K, value: string): string[] {
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+  if (trimmed.startsWith('[')) {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (Array.isArray(parsed) && parsed.every((item) => typeof item === 'string' && item.trim().length > 0)) {
+      return parsed;
+    }
+    throw new Error(`Config key ${String(key)} expects a JSON string array.`);
+  }
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function parseStringConfigValue<K extends keyof EnglishPilotConfig>(key: K, value: string): EnglishPilotConfig[K] {
@@ -286,6 +306,7 @@ function validateConfig(config: EnglishPilotConfig): EnglishPilotConfig {
   validateBoolean('ignoreCodePathsUrls', config.ignoreCodePathsUrls);
   validateBoolean('blockWithRewrite', config.blockWithRewrite);
   validateBoolean('recordAllowedPrompts', config.recordAllowedPrompts);
+  validateStringArray('disabledProjectPaths', config.disabledProjectPaths);
   validateNonNegativeInteger('ignoreShortCjkFragmentsUnder', config.ignoreShortCjkFragmentsUnder);
   validateNonNegativeInteger('coachingCooldownMinutes', config.coachingCooldownMinutes);
   validateNonNegativeInteger('maxInlineCoachingPerDay', config.maxInlineCoachingPerDay);
@@ -316,6 +337,12 @@ function validateRatioProgression(value: EnglishPilotConfig['ratioProgression'])
 function validateBoolean(key: string, value: boolean): void {
   if (typeof value !== 'boolean') {
     throw new Error(`${key} must be true or false.`);
+  }
+}
+
+function validateStringArray(key: string, value: string[]): void {
+  if (!Array.isArray(value) || !value.every((item) => typeof item === 'string' && item.trim().length > 0)) {
+    throw new Error(`${key} must be an array of non-empty strings.`);
   }
 }
 

@@ -12,6 +12,7 @@ export function helpText(): string {
     '  english-pilot mcp config [--write] [--json]',
     '  english-pilot run [--dry-run] [--json]',
     '  english-pilot daemon status [--json]',
+    '  english-pilot gate disable (--repo-ignore|--global-ignore) [--cwd <path>] [--json]',
     '  english-pilot service install [--dry-run] [--json]',
     '  english-pilot service install-dev [--dry-run] [--json]',
     '  english-pilot service uninstall|status|restart|logs|pause|resume',

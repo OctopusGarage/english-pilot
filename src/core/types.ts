@@ -27,6 +27,7 @@ export interface EnglishPilotConfig extends EnglishPilotPolicy {
   externalAgentClaudeBinary: string;
   externalAgentCodexBinary: string;
   externalAgentCodexSandbox: 'read-only' | 'workspace-write' | 'danger-full-access';
+  disabledProjectPaths: string[];
 }
 
 export interface AnalysisResult {

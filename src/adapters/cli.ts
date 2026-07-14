@@ -4,6 +4,7 @@ import { runFeishu, runFeishuAsync, runWeChat, runWeChatAsync } from './cli-chan
 import { runConfig } from './cli-config.js';
 import { runDaemonCommand, runDaemonCommandAsync, runRunCommand } from './cli-daemon.js';
 import { runEval, runEvalAsync } from './cli-eval.js';
+import { runGate } from './cli-gate.js';
 import { runInstall, runUninstall } from './cli-installer.js';
 import { runIntegrationAccountValidate, runIntegrations, runIntegrationSend } from './cli-integrations.js';
 import { runCheck, runCoach, runHook, runPronounce } from './cli-language.js';
@@ -35,6 +36,7 @@ export function runCli(argv: string[], stdin = ''): CliResult {
   if (command === 'setup') return runSetup(args);
   if (command === 'service') return runService(args);
   if (command === 'daemon') return runDaemonCommand(args);
+  if (command === 'gate') return runGate(args);
   if (command === 'config') return runConfig(args);
   if (command === 'mcp') return runMcp(args);
   if (command === 'review') return runReview(args);

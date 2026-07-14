@@ -3,6 +3,7 @@ import { extractLastAssistantEnglishNote } from '../core/assistant-note.js';
 import { loadConfig } from '../core/config.js';
 import { buildCoachingContext, type CoachingContext } from '../core/coaching-context.js';
 import { buildPromptAssessment, type PromptAssessment } from '../core/prompt-assessment.js';
+import { isProjectGateDisabled } from '../core/project-gate.js';
 import { lookupPronunciations } from '../core/pronunciation.js';
 import { extractLesson, type ExtractedLesson } from '../core/lesson.js';
 import { buildMethodTemplateLearningItem, listMethodTemplates, type MethodTemplate } from '../core/method-templates.js';
@@ -73,6 +74,9 @@ export function runHook(args: string[], stdin: string): CliResult {
 
   const prompt = isRecord(payload) && typeof payload.prompt === 'string' ? payload.prompt : '';
   const config = loadConfig();
+  if (prompt.trim() && isProjectGateDisabled(config, hookProjectPath(payload))) {
+    return { exitCode: 0, stdout: '', stderr: '' };
+  }
   const assessment = prompt.trim()
     ? buildPromptAssessment({ text: prompt, config, allowedTerms: allowedGlossaryTerms() })
     : undefined;
@@ -110,6 +114,11 @@ function maybeHandleStopHook(target: 'claude' | 'codex', args: string[], payload
     )}\n`,
     stderr: '',
   };
+}
+
+function hookProjectPath(payload: unknown): string {
+  if (isRecord(payload) && typeof payload.cwd === 'string' && payload.cwd.trim()) return payload.cwd;
+  return process.cwd();
 }
 
 export function runCoach(args: string[], stdin: string): CliResult {

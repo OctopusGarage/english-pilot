@@ -367,7 +367,30 @@ Codex installation writes:
 
 Codex may require reviewing and trusting the hook with `/hooks` before a non-managed command hook runs.
 
-The Codex submit hook enforces blocking before the prompt reaches the model. The Stop hook parses the final assistant message and records the last compact `English note` as a review item when it can extract `original -> suggested`, `Why`, and optional IPA. Final-response coaching is installed as MCP plus AGENTS guidance: Codex should complete the main task first, then append one short teaching note when the allowed prompt has Chinese fragments, awkward English, or an obvious phrasing improvement. In `force` mode this is intended to be high-frequency, not opportunistic. For history-based requests such as "summarize today's inputs" or "make an English lesson from my notes", Codex guidance tells the agent to call `english_learning_brief`, `english_input_history`, or `english_notes_history` before answering.
+Claude and Codex submit hooks enforce blocking before the prompt reaches the model. The Stop hook parses the final assistant message and records the last compact `English note` as a review item when it can extract `original -> suggested`, `Why`, and optional IPA. To disable submit-hook blocking for one repository, put this file at the repository root:
+
+```json
+{
+  "gateHook": false
+}
+```
+
+Save it as `.english-pilot.json`; hook checks in descendant directories inherit it. To manage opt-outs centrally instead, set `disabledProjectPaths`:
+
+```bash
+english-pilot config set disabledProjectPaths /path/to/project-a,/path/to/project-b
+```
+
+To create the project opt-out file and keep it uncommitted without touching the project's `.gitignore`, use one of the dedicated Git ignore modes:
+
+```bash
+english-pilot gate disable --repo-ignore
+english-pilot gate disable --global-ignore
+```
+
+`--repo-ignore` appends `.english-pilot.json` to the current repository's `.git/info/exclude`. `--global-ignore` appends it to the user's configured global Git excludes file, or to `~/.config/git/ignore` when no global `core.excludesFile` is configured.
+
+Final-response coaching is installed as MCP plus AGENTS guidance: Codex should complete the main task first, then append one short teaching note when the allowed prompt has Chinese fragments, awkward English, or an obvious phrasing improvement. In `force` mode this is intended to be high-frequency, not opportunistic. For history-based requests such as "summarize today's inputs" or "make an English lesson from my notes", Codex guidance tells the agent to call `english_learning_brief`, `english_input_history`, or `english_notes_history` before answering.
 
 ```text
 English note: "原句" -> "A more natural English version."; Why: one practical rule; IPA: key word /IPA/ when useful.

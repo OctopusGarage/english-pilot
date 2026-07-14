@@ -290,7 +290,27 @@ english-pilot config set gateMode coach
 english-pilot config set externalAgentBackend claude
 english-pilot config set externalAgentBackend codex
 english-pilot config set externalAgentCwd /path/to/workspace
+english-pilot config set disabledProjectPaths /path/to/project-a,/path/to/project-b
 ```
+
+To disable submit-hook blocking for one repository without editing global path config, add this file at the repository root:
+
+```json
+{
+  "gateHook": false
+}
+```
+
+Save it as `.english-pilot.json`; hook checks in descendant directories inherit it.
+
+To create that file and keep it out of Git using local ignore mechanisms:
+
+```bash
+english-pilot gate disable --repo-ignore
+english-pilot gate disable --global-ignore
+```
+
+Use `--repo-ignore` for the current repository's `.git/info/exclude`; use `--global-ignore` for the user's configured global Git excludes file, falling back to `~/.config/git/ignore`.
 
 Local state is stored under `~/.english-pilot` by default. Set `ENGLISH_PILOT_HOME` for tests or isolated runs.
 

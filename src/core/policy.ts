@@ -24,6 +24,7 @@ export const defaultConfig: EnglishPilotConfig = {
   externalAgentClaudeBinary: 'claude',
   externalAgentCodexBinary: 'codex',
   externalAgentCodexSandbox: 'workspace-write',
+  disabledProjectPaths: [],
 };
 
 export const defaultPolicy: EnglishPilotPolicy = defaultConfig;

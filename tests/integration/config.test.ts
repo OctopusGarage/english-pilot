@@ -90,6 +90,14 @@ describe('config commands', () => {
     });
   });
 
+  it('persists disabled project path overrides', () => {
+    const setResult = runCli(['config', 'set', 'disabledProjectPaths', '/tmp/a,/tmp/b']);
+    const getResult = runCli(['config', 'get']);
+
+    expect(setResult.exitCode).toBe(0);
+    expect(JSON.parse(getResult.stdout).disabledProjectPaths).toEqual(['/tmp/a', '/tmp/b']);
+  });
+
   it('rejects ratio config values outside their valid range', () => {
     const highMax = runCli(['config', 'set', 'maxChineseRatio', '1.5']);
     const negativeTarget = runCli(['config', 'set', 'targetChineseRatio', '-0.1']);
