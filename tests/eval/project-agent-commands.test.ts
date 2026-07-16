@@ -40,6 +40,28 @@ describe('project agent commands', () => {
     expect(statSync(scriptPath).mode & 0o111).toBeTruthy();
   });
 
+  it('provides a Claude slash command for deploying the current checkout to mac2015', () => {
+    const commandPath = join(repoRoot, '.claude', 'commands', 'deploy-mac2015.md');
+    const scriptPath = join(repoRoot, 'scripts', 'deploy-mac2015.sh');
+
+    expect(existsSync(commandPath)).toBe(true);
+    expect(existsSync(scriptPath)).toBe(true);
+
+    const command = readFileSync(commandPath, 'utf8');
+    const script = readFileSync(scriptPath, 'utf8');
+    expect(command).toContain('description: Deploy the current EnglishPilot checkout to mac2015');
+    expect(command).toContain('scripts/deploy-mac2015.sh deploy');
+    expect(script).toContain('ENGLISH_PILOT_REMOTE:-ys-aquria@mac2015.local');
+    expect(script).toContain('npm pack');
+    expect(script).toContain('npm install -g');
+    expect(script).toContain('manual-daemon.log');
+    expect(script).toContain('deployment_mode=');
+    expect(script).toContain('verified_pid=');
+    expect(script).toContain('wechat_accounts=');
+    expect(script).not.toContain('wechat doctor --json 2>/dev/null | head');
+    expect(statSync(scriptPath).mode & 0o111).toBeTruthy();
+  });
+
   it('documents the smoke eval trigger for Codex and other repo agents', () => {
     const agents = readFileSync(join(repoRoot, 'AGENTS.md'), 'utf8');
 
