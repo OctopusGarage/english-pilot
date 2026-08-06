@@ -11,6 +11,7 @@ import { createRuntimeLogger } from '../../src/core/infra/logger.js';
 import { detectUncleanRestart, markCleanShutdown, markRunning } from '../../src/core/infra/lifecycle.js';
 import { ensureRuntimeLayout } from '../../src/core/infra/state-dir.js';
 import { startConfiguredChannelRuntimes } from '../../src/daemon/channel-lifecycle.js';
+import { getDaemonStatusSnapshot, runDaemon } from '../../src/daemon/run-daemon.js';
 
 describe('daemon runtime infrastructure', () => {
   let previousHome: string | undefined;
@@ -55,6 +56,16 @@ describe('daemon runtime infrastructure', () => {
     const second = createInstanceLock(layout.instanceLockPath);
     expect(() => second.acquire()).not.toThrow();
     second.release();
+  });
+
+  it('recovers an abandoned daemon lock whose process is no longer alive', () => {
+    const layout = ensureRuntimeLayout();
+    writeFileSync(layout.instanceLockPath, JSON.stringify({ pid: -1, acquiredAt: '2026-07-09T00:00:00.000Z' }));
+
+    const lock = createInstanceLock(layout.instanceLockPath, 789);
+    expect(() => lock.acquire()).not.toThrow();
+    expect(JSON.parse(readFileSync(layout.instanceLockPath, 'utf8'))).toMatchObject({ pid: 789 });
+    lock.release();
   });
 
   it('tracks unclean restart state with a running marker', () => {
@@ -103,6 +114,24 @@ describe('daemon runtime infrastructure', () => {
       error: 'fetch failed',
     });
     expect(event.time).toEqual(expect.any(String));
+  });
+
+  it('normalizes field-only runtime messages and omits undefined fields', () => {
+    const layout = ensureRuntimeLayout();
+    createRuntimeLogger(layout.daemonLogPath).debug('daemon.debug', 'diagnostic');
+    createRuntimeLogger(layout.daemonLogPath).info('Daemon restarted', { pid: 42, omitted: undefined });
+    createRuntimeLogger(layout.daemonLogPath).error('daemon.failure', { error: new Error('boom') });
+
+    const lines = readFileSync(layout.daemonLogPath, 'utf8').trim().split('\n');
+    expect(JSON.parse(lines[1])).toMatchObject({
+      event: 'runtime.message',
+      message: 'Daemon restarted',
+      pid: 42,
+    });
+    expect(readFileSync(layout.daemonLogPath, 'utf8')).not.toContain('omitted');
+    expect(JSON.parse(lines[2])).toMatchObject({
+      error: { name: 'Error', message: 'boom' },
+    });
   });
 
   it('serves daemon status over a local control socket', async () => {
@@ -200,6 +229,39 @@ describe('daemon runtime infrastructure', () => {
     expect(JSON.parse(status.stdout)).toMatchObject({
       running: false,
       daemonLogPath: join(home, 'logs', 'daemon.log'),
+    });
+  });
+
+  it('reports disabled channel readiness during a daemon dry run without acquiring the runtime lock', async () => {
+    const result = await runDaemon({ dryRun: true });
+
+    expect(result).toMatchObject({
+      operation: 'daemon-run',
+      dryRun: true,
+      ready: false,
+      channels: {
+        feishu: 'disabled',
+        wechat: 'disabled',
+      },
+      missing: {
+        feishu: expect.arrayContaining(['FEISHU_APP_ID']),
+        wechat: expect.arrayContaining(['WECHAT_ALLOWED_USERS']),
+      },
+    });
+    expect(existsSync(ensureRuntimeLayout().instanceLockPath)).toBe(false);
+  });
+
+  it('exposes an unclean restart when the daemon socket is unavailable', async () => {
+    const layout = ensureRuntimeLayout();
+    markRunning(layout.runningMarkerPath, { pid: 456, startedAt: '2026-07-10T00:00:00.000Z' });
+
+    await expect(getDaemonStatusSnapshot()).resolves.toMatchObject({
+      running: false,
+      socketReachable: false,
+      uncleanRestart: true,
+      pid: 456,
+      startedAt: '2026-07-10T00:00:00.000Z',
+      error: expect.any(String),
     });
   });
 

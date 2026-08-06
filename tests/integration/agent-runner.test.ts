@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildExternalAgentInvocation,
   extractExternalAgentReplyText,
+  formatExternalAgentRunResult,
   runExternalAgent,
 } from '../../src/agent/runner.js';
 import { defaultConfig } from '../../src/core/policy.js';
@@ -153,6 +154,66 @@ describe('external agent runner', () => {
     expect(result.stdout).toBe('');
   });
 
+  it('turns a process spawn error into a user-visible failed run result', async () => {
+    const result = await runExternalAgent({
+      config: {
+        ...defaultConfig,
+        externalAgentBackend: 'claude',
+      },
+      prompt: 'Hello',
+      spawnProcess: fakeSpawnError(new Error('claude executable not found')),
+    });
+
+    expect(result).toMatchObject({
+      operation: 'external-agent-run',
+      dryRun: false,
+      exitCode: 1,
+      stderr: 'claude executable not found\n',
+    });
+  });
+
+  it('reports a timed-out agent process and terminates it', async () => {
+    let signal: NodeJS.Signals | undefined;
+    const result = await runExternalAgent({
+      config: {
+        ...defaultConfig,
+        externalAgentBackend: 'claude',
+      },
+      prompt: 'Hello',
+      timeoutMs: 5,
+      spawnProcess: fakeSpawnWithoutClose((killSignal) => {
+        signal = killSignal;
+      }),
+    });
+
+    expect(result).toMatchObject({
+      exitCode: null,
+      signal: 'SIGTERM',
+      stderr: 'External agent timed out after 5ms.\n',
+    });
+    expect(signal).toBe('SIGTERM');
+  });
+
+  it('formats command, output, and stderr for a human-readable run report', () => {
+    const output = formatExternalAgentRunResult({
+      operation: 'external-agent-run',
+      backend: 'claude',
+      command: 'claude',
+      args: ['-p', 'message with spaces'],
+      cwd: '/tmp/workspace',
+      promptStdin: 'Hello',
+      dryRun: false,
+      exitCode: 1,
+      stdout: 'partial response',
+      stderr: 'failed',
+    });
+
+    expect(output).toContain("Command: claude -p 'message with spaces'");
+    expect(output).toContain('Exit code: 1');
+    expect(output).toContain('partial response');
+    expect(output).toContain('stderr:\nfailed');
+  });
+
   it('extracts Claude session ids and Codex thread ids from JSONL output', async () => {
     const claude = await runExternalAgent({
       config: {
@@ -277,6 +338,44 @@ function fakeSpawn(stdoutChunks: string[]) {
       on: (event: string, listener: (...args: unknown[]) => void) => {
         listeners.set(event, [...(listeners.get(event) ?? []), listener]);
       },
+    };
+    return child as never;
+  };
+}
+
+function fakeSpawnError(error: Error) {
+  return () => {
+    const listeners = new Map<string, Array<(...args: unknown[]) => void>>();
+    const child = {
+      stdout: { on: () => undefined },
+      stderr: { on: () => undefined },
+      stdin: {
+        end: () => {
+          queueMicrotask(() => {
+            for (const listener of listeners.get('error') ?? []) listener(error);
+          });
+        },
+      },
+      kill: () => true,
+      on: (event: string, listener: (...args: unknown[]) => void) => {
+        listeners.set(event, [...(listeners.get(event) ?? []), listener]);
+      },
+    };
+    return child as never;
+  };
+}
+
+function fakeSpawnWithoutClose(onKill: (signal: NodeJS.Signals) => void) {
+  return () => {
+    const child = {
+      stdout: { on: () => undefined },
+      stderr: { on: () => undefined },
+      stdin: { end: () => undefined },
+      kill: (signal: NodeJS.Signals) => {
+        onKill(signal);
+        return true;
+      },
+      on: () => undefined,
     };
     return child as never;
   };
