@@ -1,6 +1,8 @@
 name: Dependabot auto-merge
 
-on: pull_request_target
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
@@ -9,17 +11,38 @@ permissions:
 jobs:
   auto-merge:
     if: >-
-      github.actor == 'dependabot[bot]' &&
-      github.event.pull_request.base.ref == 'dev'
+      github.event.pull_request.user.login == 'dependabot[bot]' ||
+      github.event.pull_request.user.login == 'app/dependabot'
     runs-on: ubuntu-latest
     steps:
+      - name: Retarget Dependabot PR to dev
+        if: github.event.pull_request.base.ref != 'dev'
+        run: gh pr edit "$PR_URL" --base dev
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Fetch Dependabot metadata
-        id: meta
+        id: metadata
         uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          skip-commit-verification: 'true'
+          skip-verification: 'true'
+
+      - name: Refresh Dependabot branch from dev
+        if: >-
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor'
+        run: gh pr update-branch "$PR_URL" --rebase
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Enable auto-merge into dev
+        if: >-
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor'
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
