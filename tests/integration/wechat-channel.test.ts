@@ -258,6 +258,50 @@ describe('WeChat long-connection channel', () => {
     expect(threadIds).toEqual([undefined, 'codex-thread-wechat']);
   });
 
+  it('clears a failed resumed Codex thread so the next message can recover', async () => {
+    runCli(['config', 'set', 'externalAgentBackend', 'codex']);
+    const threadIds: Array<string | undefined> = [];
+    const account = accountFixture();
+    const config = {
+      accounts: [account],
+      allowedUsers: new Set(['wxid_owner@im.wechat']),
+      replyMode: 'violation' as const,
+      botAgent: 'EnglishPilot/0.1.0',
+    };
+    let attempt = 0;
+
+    const run = (text: string) =>
+      handleWeChatMessage({
+        account,
+        config,
+        message: wechatTextMessage(text),
+        runAgent: async (options) => {
+          threadIds.push(options.threadId);
+          attempt += 1;
+          if (attempt === 2)
+            return {
+              ...agentResult('codex', options.prompt, { cwd: options.cwd }),
+              exitCode: 1,
+              stderr: 'thread expired',
+            };
+          return agentResult('codex', options.prompt, {
+            cwd: options.cwd,
+            threadId: 'codex-thread-wechat',
+            stdout: 'Recovered reply',
+          });
+        },
+        sendText: async () => ({ sent: true }),
+      });
+
+    await run('Start this WeChat context.');
+    const failed = await run('Continue the expired WeChat context.');
+    const recovered = await run('Try this WeChat message again.');
+
+    expect(failed).toMatchObject({ handled: true, replied: false, reason: 'agent-failed' });
+    expect(recovered).toMatchObject({ handled: true, replied: true });
+    expect(threadIds).toEqual([undefined, 'codex-thread-wechat', undefined]);
+  });
+
   it('clears the active WeChat agent thread with /new', async () => {
     runCli(['config', 'set', 'externalAgentBackend', 'codex']);
     const threadIds: Array<string | undefined> = [];
