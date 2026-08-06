@@ -19,6 +19,7 @@ function hasLocalGateHookOptOut(projectPath: string): boolean {
   let directory = projectPath;
   while (true) {
     if (localConfigDisablesGateHook(join(directory, PROJECT_CONFIG_FILE))) return true;
+    if (existsSync(join(directory, '.git'))) return false;
     const parent = dirname(directory);
     if (parent === directory) return false;
     directory = parent;
