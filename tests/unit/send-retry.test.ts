@@ -64,6 +64,25 @@ describe('sendWithRetry', () => {
 
     expect(result).toEqual({ sent: false, error: 'gateway unavailable' });
     expect(attempts).toBe(2);
+    expect(delays).toEqual([1]);
+  });
+
+  it('does not wait after the final retryable failure', async () => {
+    const delays: number[] = [];
+
+    const result = await sendWithRetry({
+      attempts: 3,
+      send: async () => {
+        throw new Error('ETIMEDOUT');
+      },
+      isRetryable: () => true,
+      delayMs: (attempt) => attempt + 1,
+      sleep: async (delay) => {
+        delays.push(delay);
+      },
+    });
+
+    expect(result).toEqual({ sent: false, error: 'ETIMEDOUT' });
     expect(delays).toEqual([1, 2]);
   });
 });

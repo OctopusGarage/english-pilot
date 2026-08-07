@@ -194,7 +194,10 @@ async function apiPost(
 ): Promise<Record<string, unknown>> {
   const controller = input.timeoutMs ? new AbortController() : undefined;
   const timeout = controller && input.timeoutMs ? setTimeout(() => controller.abort(), input.timeoutMs) : undefined;
-  const signal = input.abortSignal ?? controller?.signal;
+  const signal =
+    input.abortSignal && controller
+      ? AbortSignal.any([input.abortSignal, controller.signal])
+      : (input.abortSignal ?? controller?.signal);
   try {
     const response = await fetchImpl(input.fetch)(urlFor(input.baseUrl, input.endpoint), {
       method: 'POST',
