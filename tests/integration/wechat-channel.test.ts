@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runCli } from '../../src/adapters/cli.js';
+import { getWeChatUpdates } from '../../src/channels/wechat/api.js';
 import { loadWeChatChannelConfig } from '../../src/channels/wechat/config.js';
 import { monitorWeChatTextMessage } from '../../src/channels/wechat/monitor.js';
 import { handleWeChatMessage, monitorWeChatAccount } from '../../src/channels/wechat/start.js';
@@ -26,6 +27,31 @@ describe('WeChat long-connection channel', () => {
       process.env.ENGLISH_PILOT_HOME = previousHome;
     }
     rmSync(home, { recursive: true, force: true });
+  });
+
+  it('enforces the long-poll timeout when the daemon supplies an abort signal', async () => {
+    const daemonAbort = new AbortController();
+    let requestSignal: AbortSignal | undefined;
+    const pending = getWeChatUpdates({
+      baseUrl: 'https://ilinkai.weixin.qq.com',
+      syncCursor: 'cursor-1',
+      timeoutMs: 1,
+      abortSignal: daemonAbort.signal,
+      fetch: async (_url, init) => {
+        requestSignal = init?.signal ?? undefined;
+        return await new Promise<Response>((_resolve, reject) => {
+          requestSignal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true });
+        });
+      },
+    });
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(requestSignal?.aborted).toBe(true);
+    } finally {
+      daemonAbort.abort();
+      await pending;
+    }
   });
 
   it('loads local QR-login accounts and supports dry-run doctor output', () => {

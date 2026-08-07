@@ -23,7 +23,7 @@ export async function sendWithRetry<T>(input: SendWithRetryInput<T>): Promise<Se
     } catch (error) {
       lastError = error;
       if (!input.isRetryable(error)) break;
-      await wait(delayMs(attempt));
+      if (attempt + 1 < attempts) await wait(delayMs(attempt));
     }
   }
   return {
