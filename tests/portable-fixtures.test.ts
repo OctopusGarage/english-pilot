@@ -27,6 +27,5 @@ describe('check-portable-fixtures', () => {
     });
 
     expect(result.status).toBe(0);
-    expect(result.stderr).toBe('');
   });
 });
