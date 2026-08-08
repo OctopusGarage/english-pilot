@@ -3,11 +3,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runCli } from '../../src/adapters/cli.js';
-import { getWeChatUpdates } from '../../src/channels/wechat/api.js';
+import { getWeChatUpdates, sendWeChatMessage } from '../../src/channels/wechat/api.js';
 import { loadWeChatChannelConfig } from '../../src/channels/wechat/config.js';
 import { monitorWeChatTextMessage } from '../../src/channels/wechat/monitor.js';
 import { handleWeChatMessage, monitorWeChatAccount } from '../../src/channels/wechat/start.js';
-import { saveWeChatAccount } from '../../src/channels/wechat/state.js';
+import { loadWeChatSyncCursor, saveWeChatAccount } from '../../src/channels/wechat/state.js';
 import { listLearningItems, listPromptEvents } from '../../src/storage/repository.js';
 
 describe('WeChat long-connection channel', () => {
@@ -40,7 +40,9 @@ describe('WeChat long-connection channel', () => {
       fetch: async (_url, init) => {
         requestSignal = init?.signal ?? undefined;
         return await new Promise<Response>((_resolve, reject) => {
-          requestSignal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true });
+          requestSignal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), {
+            once: true,
+          });
         });
       },
     });
@@ -52,6 +54,18 @@ describe('WeChat long-connection channel', () => {
       daemonAbort.abort();
       await pending;
     }
+  });
+
+  it('treats non-zero WeChat send errcode responses as delivery failures', async () => {
+    await expect(
+      sendWeChatMessage({
+        baseUrl: 'https://ilinkai.weixin.qq.com',
+        token: 'secret-token',
+        to: 'wxid_owner@im.wechat',
+        text: 'Reply',
+        fetch: async () => jsonResponse({ errcode: 40001, errmsg: 'invalid credential' }),
+      }),
+    ).rejects.toThrow('WeChat sendmessage failed: errcode=40001 invalid credential');
   });
 
   it('loads local QR-login accounts and supports dry-run doctor output', () => {
@@ -477,6 +491,49 @@ describe('WeChat long-connection channel', () => {
 
     expect(delays).toEqual([3000, 6000, 12000, 24000, 48000]);
   });
+
+  it('retries non-zero WeChat getupdates errcode responses without advancing the cursor', async () => {
+    const account = accountFixture();
+    const cursors: string[] = [];
+    const delays: number[] = [];
+    let attempts = 0;
+
+    await monitorWeChatAccount({
+      account,
+      config: {
+        accounts: [account],
+        allowedUsers: new Set(['wxid_owner@im.wechat']),
+        replyMode: 'violation',
+        botAgent: 'EnglishPilot/0.1.0',
+      },
+      maxIterations: 2,
+      sleep: async (delayMs) => {
+        delays.push(delayMs);
+      },
+      getUpdates: async ({ syncCursor }) => {
+        attempts += 1;
+        cursors.push(syncCursor);
+        if (attempts === 1) {
+          return {
+            errcode: 40001,
+            errmsg: 'invalid credential',
+            msgs: [],
+            get_updates_buf: 'cursor-from-error',
+          };
+        }
+        return {
+          ret: 0,
+          msgs: [],
+          get_updates_buf: 'cursor-after-retry',
+        };
+      },
+      notifyStop: async () => {},
+    });
+
+    expect(cursors).toEqual(['', '']);
+    expect(delays).toEqual([3000]);
+    expect(loadWeChatSyncCursor(account.accountId)).toBe('cursor-after-retry');
+  });
 });
 
 function accountFixture() {
@@ -520,4 +577,12 @@ function agentResult(
     stderr: '',
     ...ids,
   };
+}
+
+function jsonResponse(body: unknown): Response {
+  return {
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify(body),
+  } as Response;
 }
