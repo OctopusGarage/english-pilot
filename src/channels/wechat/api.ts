@@ -142,6 +142,9 @@ export async function sendWeChatMessage(
   if (response.ret && response.ret !== 0) {
     throw new Error(`WeChat sendmessage failed: ret=${response.ret} ${response.errmsg ?? ''}`.trim());
   }
+  if (response.errcode && response.errcode !== 0) {
+    throw new Error(`WeChat sendmessage failed: errcode=${response.errcode} ${response.errmsg ?? ''}`.trim());
+  }
 }
 
 export async function notifyWeChatStart(input: WeChatApiOptions): Promise<void> {
