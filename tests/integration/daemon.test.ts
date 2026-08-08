@@ -251,6 +251,41 @@ describe('daemon runtime infrastructure', () => {
     expect(existsSync(ensureRuntimeLayout().instanceLockPath)).toBe(false);
   });
 
+  it('cleans daemon runtime markers and lock when a non-persistent run exits', async () => {
+    const layout = ensureRuntimeLayout();
+    const logs: string[] = [];
+
+    const result = await runDaemon({ waitForever: false, log: (line) => logs.push(line) });
+
+    expect(result).toMatchObject({
+      operation: 'daemon-run',
+      dryRun: false,
+      ready: false,
+      socketPath: layout.controlSocketPath,
+      channels: {
+        feishu: 'disabled',
+        wechat: 'disabled',
+      },
+    });
+    expect(logs).toEqual([`EnglishPilot daemon control socket: ${layout.controlSocketPath}`]);
+    expect(existsSync(layout.instanceLockPath)).toBe(false);
+    expect(existsSync(layout.runningMarkerPath)).toBe(false);
+    expect(readFileSync(layout.daemonLogPath, 'utf8')).toContain('EnglishPilot daemon stopped cleanly.');
+  });
+
+  it('fails fast without writing a running marker when another daemon owns the lock', async () => {
+    const layout = ensureRuntimeLayout();
+    const lock = createInstanceLock(layout.instanceLockPath);
+    lock.acquire();
+
+    try {
+      await expect(runDaemon({ waitForever: false })).rejects.toBeInstanceOf(InstanceLockHeldError);
+      expect(existsSync(layout.runningMarkerPath)).toBe(false);
+    } finally {
+      lock.release();
+    }
+  });
+
   it('exposes an unclean restart when the daemon socket is unavailable', async () => {
     const layout = ensureRuntimeLayout();
     markRunning(layout.runningMarkerPath, { pid: 456, startedAt: '2026-07-10T00:00:00.000Z' });
