@@ -1,7 +1,7 @@
 import { loadConfig } from '../core/config.js';
 import { buildExternalChannelAgentPrompt, type ExternalChannelAgentPromptInput } from './channel-prompt.js';
 import { extractExternalAgentReplyText, runExternalAgent, type ExternalAgentRunResult } from './runner.js';
-import { getAgentSession, saveAgentSessionFromResult } from './session-store.js';
+import { clearAgentSession, getAgentSession, saveAgentSessionFromResult } from './session-store.js';
 import type { RuntimeLogger } from '../core/infra/logger.js';
 
 export interface ExternalChannelAgentTurnInput {
@@ -58,6 +58,7 @@ export async function runExternalChannelAgentTurn(
   });
 
   if (result.exitCode !== 0) {
+    if (session) clearAgentSession(input.scope);
     input.log?.(`${input.failureLabel ?? 'External agent'} failed: ${agentErrorSummary(result)}`);
     input.logger?.warn('external_agent.failed', 'External agent turn failed.', {
       channel: input.channel,

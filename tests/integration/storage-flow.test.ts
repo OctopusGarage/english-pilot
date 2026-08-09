@@ -71,6 +71,30 @@ describe('local learning storage flow', () => {
     });
   });
 
+  it('keeps learning review state consistent when JSONL storage is selected', () => {
+    expect(runCli(['config', 'set', 'storage', 'jsonl']).exitCode).toBe(0);
+
+    const original = '我想创建一个 new project，用来辅助英语学习。';
+    runCli(['check', '--text', original, '--json']);
+    const [item] = JSON.parse(runCli(['review', '--json']).stdout);
+
+    const marked = runCli(['review', 'mark', item.id, 'again']);
+    const [updated] = JSON.parse(runCli(['review', '--json']).stdout);
+
+    expect(marked.exitCode).toBe(0);
+    expect(updated).toMatchObject({
+      id: item.id,
+      reviewCount: 1,
+      lapseCount: 1,
+      intervalDays: 0,
+    });
+    expect(readFileSync(join(home, 'learning-items.jsonl'), 'utf8')).toContain('"lapseCount":1');
+    expect(JSON.parse(runCli(['stats', '--json']).stdout)).toMatchObject({
+      promptEvents: 1,
+      learningItems: 1,
+    });
+  });
+
   it('exports learning items as markdown cards', () => {
     const original = '我想创建一个 new project，用来辅助英语学习。';
     runCli(['check', '--text', original, '--json']);

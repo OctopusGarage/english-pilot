@@ -2323,6 +2323,29 @@ describe('runCli', () => {
     }
   });
 
+  it('does not inherit an ancestor project opt-out across a nested Git repository', () => {
+    const ancestor = join(home, 'ancestor-disabled-project');
+    const projectRoot = join(ancestor, 'nested-project');
+    const nestedProjectDir = join(projectRoot, 'src');
+    mkdirSync(join(projectRoot, '.git'), { recursive: true });
+    mkdirSync(nestedProjectDir, { recursive: true });
+    writeFileSync(join(ancestor, '.english-pilot.json'), JSON.stringify({ gateHook: false }, null, 2), 'utf8');
+    const previousCwd = process.cwd();
+
+    try {
+      process.chdir(nestedProjectDir);
+      const result = runCli(
+        ['hook', 'codex', '--stdin'],
+        JSON.stringify({ prompt: '帮我实现这个项目里的功能，不要问太多' }),
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout)).toMatchObject({ decision: 'block' });
+    } finally {
+      process.chdir(previousCwd);
+    }
+  });
+
   it('disables the gate hook and adds the opt-out file to repo-local git excludes', () => {
     const projectRoot = join(home, 'repo-local-ignore-project');
     const nestedProjectDir = join(projectRoot, 'src');

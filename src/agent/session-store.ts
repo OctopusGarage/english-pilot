@@ -28,8 +28,8 @@ export function saveAgentSessionFromResult(
   scope: string,
   result: ExternalAgentRunResult,
 ): AgentSessionEntry | undefined {
-  const sessionId = result.backend === 'claude' ? result.sessionId : undefined;
-  const threadId = result.backend === 'codex' ? result.threadId : undefined;
+  const sessionId = result.backend === 'claude' ? result.sessionId?.trim() : undefined;
+  const threadId = result.backend === 'codex' ? result.threadId?.trim() : undefined;
   if (!sessionId && !threadId) return undefined;
   const sessions = readAgentSessions();
   const entry: AgentSessionEntry = {

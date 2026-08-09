@@ -5,7 +5,10 @@ import { buildDailyReviewIntegrationPayload } from '../../src/integrations/daily
 import { buildIntegrationDeliveryModePolicy } from '../../src/integrations/delivery-mode.js';
 import { buildDailyReviewDryRun } from '../../src/integrations/dry-run.js';
 import { buildIntegrationPreflight } from '../../src/integrations/preflight.js';
-import { buildIntegrationSendReadiness } from '../../src/integrations/send-readiness.js';
+import {
+  buildIntegrationSendReadiness,
+  formatIntegrationSendReadiness,
+} from '../../src/integrations/send-readiness.js';
 import { sendDailyReviewIntegration } from '../../src/integrations/network-sender.js';
 import { findIntegrationTarget } from '../../src/integrations/targets.js';
 
@@ -92,6 +95,31 @@ describe('sendDailyReviewIntegration', () => {
       }),
     ).rejects.toThrow('Integration is not ready to send: long-connection-bot');
     expect(calls).toEqual([]);
+  });
+
+  it('reports credential and confirmation checks independently in readiness output', () => {
+    const target = findIntegrationTarget('feishu');
+    if (!target) throw new Error('missing feishu target');
+    const readiness = buildReadiness(
+      target,
+      {
+        FEISHU_APP_ID: 'app-id',
+        FEISHU_APP_SECRET: 'app-secret',
+        FEISHU_ALLOWED_OPEN_IDS: 'open-id',
+      },
+      true,
+    );
+
+    expect(readiness.ready).toBe(false);
+    expect(readiness.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'credentials', ok: true }),
+        expect.objectContaining({ name: 'send-confirmation', ok: true }),
+      ]),
+    );
+    expect(readiness.blockers).not.toContain('Missing credential: FEISHU_APP_ID');
+    expect(formatIntegrationSendReadiness(readiness)).toContain('Send readiness: blocked');
+    expect(formatIntegrationSendReadiness(readiness)).toContain('send-confirmation: ok');
   });
 });
 
