@@ -1461,6 +1461,123 @@ describe('runCli', () => {
     ]);
   });
 
+  it('coaches a WeChat event JSON payload and records the lesson when requested', () => {
+    const result = runCli([
+      'integrations',
+      'event-coaching',
+      '--target',
+      'wechat',
+      '--event-json',
+      JSON.stringify({
+        Content: '我想创建一个 new project，用来辅助英语学习。',
+        MsgId: 'wx_msg_1',
+        FromUserName: 'wx_user_1',
+      }),
+      '--record',
+      '--json',
+    ]);
+    const review = runCli(['review', '--json']);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      event: {
+        text: '我想创建一个 new project，用来辅助英语学习。',
+        messageId: 'wx_msg_1',
+        senderId: 'wx_user_1',
+      },
+      coaching: {
+        target: { id: 'wechat', status: 'supported' },
+        message: {
+          analysis: { decision: 'BLOCK' },
+          rewrite: expect.stringContaining('create a new project'),
+          shouldRecord: true,
+        },
+      },
+      recorded: true,
+      item: {
+        suggested: expect.stringContaining('create a new project'),
+        tags: expect.arrayContaining(['integration-message', 'wechat']),
+      },
+    });
+    expect(JSON.parse(review.stdout)).toEqual([
+      expect.objectContaining({
+        original: '我想创建一个 new project，用来辅助英语学习。',
+        tags: expect.arrayContaining(['integration-message', 'wechat']),
+      }),
+    ]);
+  });
+
+  it('reports invalid integration event JSON without recording review state', () => {
+    const result = runCli([
+      'integrations',
+      'event-coaching',
+      '--target',
+      'wechat',
+      '--event-json',
+      '{not json',
+      '--record',
+      '--json',
+    ]);
+
+    expect(result).toEqual({
+      exitCode: 1,
+      stdout: '',
+      stderr: 'Invalid integration event JSON.\n',
+    });
+    expect(JSON.parse(runCli(['review', '--json']).stdout)).toEqual([]);
+  });
+
+  it('lists and filters integration validation history from local state', () => {
+    writeFileSync(
+      join(home, 'integration-validations.jsonl'),
+      [
+        JSON.stringify({
+          id: 'validation_wechat_20260811000000_abc123',
+          createdAt: '2026-08-11T00:00:00.000Z',
+          operation: 'account-validation',
+          target: { id: 'wechat', label: 'WeChat', status: 'supported' },
+          validated: true,
+          send: true,
+          network: true,
+          stages: [],
+          blockers: [],
+          deliveryTargetApi: 'wechat-long-connection',
+        }),
+        JSON.stringify({
+          id: 'validation_feishu_20260811010000_def456',
+          createdAt: '2026-08-11T01:00:00.000Z',
+          operation: 'account-validation',
+          target: { id: 'feishu', label: 'Feishu/Lark', status: 'supported' },
+          validated: false,
+          send: false,
+          network: false,
+          stages: [],
+          blockers: ['Pass --send to perform account validation network delivery.'],
+        }),
+      ].join('\n') + '\n',
+      'utf8',
+    );
+
+    const json = runCli(['integrations', 'validation-history', '--target', 'wechat', '--json']);
+    const human = runCli(['integrations', 'validation-history']);
+
+    expect(json.exitCode).toBe(0);
+    expect(json.stderr).toBe('');
+    expect(JSON.parse(json.stdout)).toMatchObject({
+      records: [
+        {
+          id: 'validation_wechat_20260811000000_abc123',
+          target: { id: 'wechat' },
+          validated: true,
+        },
+      ],
+    });
+    expect(human.stdout).toContain('2026-08-11T00:00:00.000Z - WeChat: validated');
+    expect(human.stdout).toContain('target api: wechat-long-connection');
+    expect(human.stdout).toContain('2026-08-11T01:00:00.000Z - Feishu/Lark: not validated');
+  });
+
   it('delivers a daily review pack to Obsidian Markdown files without network access', () => {
     runCli([
       'coach',
