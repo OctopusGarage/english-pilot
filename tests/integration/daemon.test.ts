@@ -1,9 +1,10 @@
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
+import { createServer, type Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { runCli } from '../../src/adapters/cli.js';
+import { runCli, runCliAsync } from '../../src/adapters/cli.js';
 import { createControlClient } from '../../src/adapters/control/client.js';
 import { startControlServer } from '../../src/adapters/control/server.js';
 import { createInstanceLock, InstanceLockHeldError } from '../../src/core/infra/instance-lock.js';
@@ -161,6 +162,42 @@ describe('daemon runtime infrastructure', () => {
       });
     } finally {
       await server.close();
+    }
+  });
+
+  it('times out when the daemon control socket accepts but never replies', async () => {
+    const layout = ensureRuntimeLayout();
+    const sockets = new Set<Socket>();
+    const server = createServer((socket) => {
+      sockets.add(socket);
+      socket.once('close', () => sockets.delete(socket));
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(layout.controlSocketPath, () => {
+        server.off('error', reject);
+        resolve();
+      });
+    });
+
+    try {
+      const status = createControlClient(layout.controlSocketPath, { timeoutMs: 20 }).status();
+      const bounded = Promise.race([
+        status,
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('client hung waiting for daemon control response')), 200);
+        }),
+      ]);
+
+      await expect(bounded).rejects.toThrow('Timed out waiting for daemon control response after 20ms.');
+    } finally {
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
     }
   });
 
@@ -415,6 +452,37 @@ describe('daemon runtime infrastructure', () => {
       daemonLogPath: layout.daemonLogPath,
     });
     expect(readFileSync(layout.runningMarkerPath, 'utf8')).toContain('2026-07-09T00:00:00.000Z');
+  });
+
+  it('reports a reachable daemon socket in doctor output', async () => {
+    const layout = ensureRuntimeLayout();
+    const server = await startControlServer({
+      socketPath: layout.controlSocketPath,
+      getStatus: () => ({
+        ok: true,
+        pid: 84,
+        startedAt: '2026-07-10T12:00:00.000Z',
+        channels: {
+          feishu: 'running',
+          wechat: 'disabled',
+        },
+      }),
+    });
+
+    try {
+      const result = await runCliAsync(['doctor', '--json']);
+      const report = JSON.parse(result.stdout);
+
+      expect(report.daemon).toMatchObject({
+        running: true,
+        socketReachable: true,
+        pid: 84,
+        startedAt: '2026-07-10T12:00:00.000Z',
+        controlSocketPath: layout.controlSocketPath,
+      });
+    } finally {
+      await server.close();
+    }
   });
 });
 

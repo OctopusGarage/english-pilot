@@ -9,7 +9,16 @@ import { runInstall, runUninstall } from './cli-installer.js';
 import { runIntegrationAccountValidate, runIntegrations, runIntegrationSend } from './cli-integrations.js';
 import { runCheck, runCoach, runHook, runPronounce } from './cli-language.js';
 import { runMcp } from './cli-mcp.js';
-import { runDoctor, runExport, runGlossary, runHandoff, runRoadmap, runStats, runStatus } from './cli-project.js';
+import {
+  runDoctor,
+  runDoctorAsync,
+  runExport,
+  runGlossary,
+  runHandoff,
+  runRoadmap,
+  runStats,
+  runStatus,
+} from './cli-project.js';
 import { runDaily, runReview } from './cli-review.js';
 import { runService } from './cli-service.js';
 import { runSetup } from './cli-setup.js';
@@ -71,6 +80,9 @@ export async function runCliAsync(argv: string[], stdin = '', options: CliAsyncO
   }
   if (command === 'daemon') {
     return runDaemonCommandAsync(args);
+  }
+  if (command === 'doctor') {
+    return runDoctorAsync(args);
   }
   if (command === 'integrations' && args[0] === 'send') {
     return runIntegrationSend(args, options);
