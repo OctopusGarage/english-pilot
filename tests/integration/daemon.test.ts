@@ -398,6 +398,40 @@ describe('daemon runtime infrastructure', () => {
     }
   });
 
+  it('tails launchd logs from ENGLISH_PILOT_HOME when service logs runs on macOS', () => {
+    const fakeBin = join(home, 'fake-bin');
+    const customHome = join(home, 'custom-runtime-home');
+    const tailArgs = join(home, 'tail-args.log');
+    mkdirSync(fakeBin, { recursive: true });
+    mkdirSync(join(customHome, 'logs'), { recursive: true });
+    writeExecutable(join(fakeBin, 'uname'), ['#!/bin/sh', 'echo Darwin', ''].join('\n'));
+    writeExecutable(
+      join(fakeBin, 'tail'),
+      ['#!/bin/sh', 'printf "%s\\n" "$@" > "$TAIL_ARGS"', 'exit 0', ''].join('\n'),
+    );
+
+    const result = spawnSync('sh', ['scripts/service.sh', 'logs'], {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        HOME: join(home, 'login-home'),
+        ENGLISH_PILOT_HOME: customHome,
+        PATH: `${fakeBin}:${process.env.PATH ?? ''}`,
+        TAIL_ARGS: tailArgs,
+      },
+    });
+
+    expect(result).toMatchObject({ status: 0 });
+    expect(readFileSync(tailArgs, 'utf8').trim().split('\n')).toEqual([
+      '-n',
+      '200',
+      '-f',
+      join(customHome, 'logs', 'launchd.out.log'),
+      join(customHome, 'logs', 'launchd.err.log'),
+    ]);
+  });
+
   it('includes the active Node bin directory in generated launchd service PATH', () => {
     const fakeBin = join(home, 'fake-node-bin');
     const calls = join(home, 'launchctl-calls.log');
