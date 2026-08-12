@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { getEnglishPilotHome } from '../core/config.js';
 import type { ExternalAgentBackend, ExternalAgentRunResult } from './runner.js';
@@ -77,6 +77,7 @@ function writeAgentSessions(sessions: Record<string, AgentSessionEntry>): void {
   const path = agentSessionsPath();
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(sessions, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+  chmodSync(path, 0o600);
 }
 
 function normalizeEntry(scope: string, value: unknown): AgentSessionEntry | undefined {
