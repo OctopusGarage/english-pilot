@@ -279,6 +279,41 @@ describe('daemon runtime infrastructure', () => {
     });
   });
 
+  it('returns actionable usage for invalid service and daemon subcommands', () => {
+    const service = runCli(['service', 'rotate']);
+    const daemon = runCli(['daemon', 'restart']);
+
+    expect(service).toMatchObject({
+      exitCode: 1,
+      stdout: '',
+    });
+    expect(service.stderr).toContain('english-pilot service install [--dry-run] [--json]');
+    expect(service.stderr).toContain('english-pilot service pause');
+    expect(service.stderr).toContain('english-pilot service resume');
+
+    expect(daemon).toEqual({
+      exitCode: 1,
+      stdout: '',
+      stderr: 'Usage: english-pilot daemon status [--json]\n',
+    });
+  });
+
+  it('prints daemon dry-run readiness from the async CLI without leaving runtime markers', async () => {
+    const layout = ensureRuntimeLayout();
+
+    const result = await runCliAsync(['run', '--dry-run']);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toContain('EnglishPilot daemon');
+    expect(result.stdout).toContain('Ready: no');
+    expect(result.stdout).toContain(`Control socket: ${layout.controlSocketPath}`);
+    expect(result.stdout).toContain('Feishu: disabled (FEISHU_APP_ID');
+    expect(result.stdout).toContain('WeChat: disabled (WECHAT_ACCOUNT, WECHAT_ALLOWED_USERS)');
+    expect(existsSync(layout.instanceLockPath)).toBe(false);
+    expect(existsSync(layout.runningMarkerPath)).toBe(false);
+  });
+
   it('reports disabled channel readiness during a daemon dry run without acquiring the runtime lock', async () => {
     const result = await runDaemon({ dryRun: true });
 

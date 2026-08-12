@@ -4,7 +4,11 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildDailyReviewPack } from '../../src/core/lesson.js';
 import type { LearningItem, LearningItemDraft } from '../../src/core/learning-card.js';
-import type { IntegrationAccountValidationResult } from '../../src/integrations/account-validation.js';
+import {
+  formatIntegrationAccountValidation,
+  runIntegrationAccountValidation,
+  type IntegrationAccountValidationResult,
+} from '../../src/integrations/account-validation.js';
 import { buildIntegrationCredentialPolicy } from '../../src/integrations/credential-policy.js';
 import { buildDailyReviewIntegrationPayload } from '../../src/integrations/daily-pack.js';
 import { buildIntegrationDeliveryModePolicy } from '../../src/integrations/delivery-mode.js';
@@ -131,6 +135,75 @@ describe('sendDailyReviewIntegration', () => {
     expect(readiness.blockers).not.toContain('Missing credential: FEISHU_APP_ID');
     expect(formatIntegrationSendReadiness(readiness)).toContain('Send readiness: blocked');
     expect(formatIntegrationSendReadiness(readiness)).toContain('send-confirmation: ok');
+  });
+});
+
+describe('integration account validation', () => {
+  it('does not attempt network delivery until the user explicitly passes send', async () => {
+    const target = requiredTarget('wechat');
+    const calls: string[] = [];
+
+    const result = await runIntegrationAccountValidation({
+      target,
+      payload: buildDailyReviewIntegrationPayload(target, buildDailyReviewPack([], '2026-08-11')),
+      send: false,
+      env: { WECHAT_ALLOWED_USERS: 'wx_user' },
+      fetch: async (url) => {
+        calls.push(String(url));
+        return jsonResponse({});
+      },
+    });
+
+    expect(calls).toEqual([]);
+    expect(result).toMatchObject({
+      validated: false,
+      send: false,
+      network: false,
+      blockers: ['Pass --send to perform account validation network delivery.'],
+    });
+    expect(result.stages.at(-1)).toEqual({
+      name: 'network-send',
+      ok: false,
+      skipped: true,
+      detail: 'Pass --send to perform account validation network delivery.',
+    });
+    expect(formatIntegrationAccountValidation(result)).toContain(
+      '- network-send: blocked (skipped) - Pass --send to perform account validation network delivery.',
+    );
+  });
+
+  it('reports readiness blockers instead of sending when account validation is not ready', async () => {
+    const target = requiredTarget('wechat');
+    const calls: string[] = [];
+
+    const result = await runIntegrationAccountValidation({
+      target,
+      payload: buildDailyReviewIntegrationPayload(target, buildDailyReviewPack([], '2026-08-11')),
+      send: true,
+      env: {},
+      fetch: async (url) => {
+        calls.push(String(url));
+        return jsonResponse({});
+      },
+    });
+
+    expect(calls).toEqual([]);
+    expect(result).toMatchObject({
+      validated: false,
+      send: true,
+      network: false,
+      blockers: expect.arrayContaining([
+        'long-connection-bot',
+        'WeChat uses `english-pilot wechat start`; HTTP request-preview sending is deprecated.',
+      ]),
+    });
+    expect(result.stages.at(-1)).toEqual({
+      name: 'network-send',
+      ok: false,
+      skipped: true,
+      detail: 'Skipped because send readiness is blocked.',
+    });
+    expect(formatIntegrationAccountValidation(result)).toContain('- send-readiness: blocked -');
   });
 });
 
