@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -6,8 +6,14 @@ import { runCli } from '../../src/adapters/cli.js';
 import { getWeChatUpdates, sendWeChatMessage } from '../../src/channels/wechat/api.js';
 import { loadWeChatChannelConfig } from '../../src/channels/wechat/config.js';
 import { monitorWeChatTextMessage } from '../../src/channels/wechat/monitor.js';
+import { runWeChatOnboarding } from '../../src/channels/wechat/onboarding.js';
 import { handleWeChatMessage, monitorWeChatAccount } from '../../src/channels/wechat/start.js';
-import { loadWeChatSyncCursor, saveWeChatAccount } from '../../src/channels/wechat/state.js';
+import {
+  getWeChatAccountsDir,
+  listWeChatAccounts,
+  loadWeChatSyncCursor,
+  saveWeChatAccount,
+} from '../../src/channels/wechat/state.js';
 import { listLearningItems, listPromptEvents } from '../../src/storage/repository.js';
 
 describe('WeChat long-connection channel', () => {
@@ -94,6 +100,71 @@ describe('WeChat long-connection channel', () => {
       wouldConnect: false,
       accountCount: 1,
     });
+  });
+
+  it('stores QR-login accounts with private file permissions after redirect confirmation', async () => {
+    const logs: string[] = [];
+    const calls: string[] = [];
+    const result = await runWeChatOnboarding({
+      timeoutMs: 1000,
+      pollIntervalMs: 0,
+      log: (line) => logs.push(line),
+      fetch: async (url) => {
+        calls.push(String(url));
+        if (String(url).includes('get_bot_qrcode')) {
+          return jsonResponse({
+            qrcode: 'qr-token',
+            qrcode_img_content: 'https://wechat.example.test/qr',
+          });
+        }
+        if (calls.length === 2) {
+          return jsonResponse({ status: 'scaned_but_redirect', redirect_host: 'redirect.wechat.example.test' });
+        }
+        return jsonResponse({
+          status: 'confirmed',
+          ilink_bot_id: 'bot@im.wechat',
+          bot_token: 'secret-token',
+          ilink_user_id: 'wxid_owner@im.wechat',
+        });
+      },
+    });
+
+    expect(result).toMatchObject({
+      connected: true,
+      message: 'Connected WeChat account bot-im-wechat.',
+      account: {
+        accountId: 'bot-im-wechat',
+        token: 'secret-token',
+        baseUrl: 'https://redirect.wechat.example.test',
+        userId: 'wxid_owner@im.wechat',
+      },
+    });
+    expect(calls[1]).toContain('https://ilinkai.weixin.qq.com/ilink/bot/get_qrcode_status');
+    expect(calls[2]).toContain('https://redirect.wechat.example.test/ilink/bot/get_qrcode_status');
+    expect(logs).toContain('Scan this QR code with WeChat to connect EnglishPilot:');
+    expect(listWeChatAccounts()).toHaveLength(1);
+    expect(statSync(join(getWeChatAccountsDir(), 'bot-im-wechat.json')).mode & 0o077).toBe(0);
+  });
+
+  it('fails QR onboarding before polling when the QR API omits the QR code', async () => {
+    const calls: string[] = [];
+
+    const result = await runWeChatOnboarding({
+      timeoutMs: 1,
+      pollIntervalMs: 0,
+      log: () => undefined,
+      fetch: async (url) => {
+        calls.push(String(url));
+        return jsonResponse({});
+      },
+    });
+
+    expect(result).toEqual({
+      connected: false,
+      message: 'WeChat QR login did not return a QR code.',
+    });
+    expect(calls).toHaveLength(1);
+    expect(listWeChatAccounts()).toEqual([]);
   });
 
   it('records blocked WeChat direct messages and prepares a copyable reply', () => {
