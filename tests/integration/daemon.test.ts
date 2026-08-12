@@ -69,6 +69,16 @@ describe('daemon runtime infrastructure', () => {
     lock.release();
   });
 
+  it('recovers an abandoned malformed daemon lock left by an interrupted acquire', () => {
+    const layout = ensureRuntimeLayout();
+    writeFileSync(layout.instanceLockPath, '', 'utf8');
+
+    const lock = createInstanceLock(layout.instanceLockPath, 789);
+    expect(() => lock.acquire()).not.toThrow();
+    expect(JSON.parse(readFileSync(layout.instanceLockPath, 'utf8'))).toMatchObject({ pid: 789 });
+    lock.release();
+  });
+
   it('tracks unclean restart state with a running marker', () => {
     const layout = ensureRuntimeLayout();
 

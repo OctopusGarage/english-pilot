@@ -1,12 +1,8 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import {
-  clearAgentSession,
-  getAgentSession,
-  saveAgentSessionFromResult,
-} from '../../src/agent/session-store.js';
+import { clearAgentSession, getAgentSession, saveAgentSessionFromResult } from '../../src/agent/session-store.js';
 import type { ExternalAgentRunResult } from '../../src/agent/runner.js';
 
 describe('agent session store', () => {
@@ -52,6 +48,16 @@ describe('agent session store', () => {
 
     expect(getAgentSession('invalid', 'claude', '/tmp/project')).toBeUndefined();
     expect(getAgentSession('broken', 'codex', '/tmp/project')).toBeUndefined();
+  });
+
+  it('tightens permissions when updating an existing session store file', () => {
+    const path = join(home, 'agent-sessions.json');
+    writeFileSync(path, '{}\n', 'utf8');
+    chmodSync(path, 0o644);
+
+    saveAgentSessionFromResult('feishu:chat-1', runResult({ sessionId: 'claude-1' }));
+
+    expect(statSync(path).mode & 0o777).toBe(0o600);
   });
 });
 
