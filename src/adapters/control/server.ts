@@ -1,6 +1,11 @@
 import { existsSync, rmSync } from 'node:fs';
 import { createServer, type Server, type Socket } from 'node:net';
-import type { ControlRequest, ControlResponse, DaemonStatus } from './protocol.js';
+import type {
+  ControlRequest,
+  ControlResponse,
+  DaemonStatus,
+  WeChatDailyReviewDaemonDeliveryResult,
+} from './protocol.js';
 
 export interface ControlServer {
   close(): Promise<void>;
@@ -9,6 +14,9 @@ export interface ControlServer {
 export async function startControlServer(input: {
   socketPath: string;
   getStatus: () => DaemonStatus;
+  deliverWeChatDailyReview?: (
+    payload: Extract<ControlRequest, { method: 'wechat.dailyReview.deliver' }>['payload'],
+  ) => Promise<WeChatDailyReviewDaemonDeliveryResult> | WeChatDailyReviewDaemonDeliveryResult;
 }): Promise<ControlServer> {
   if (existsSync(input.socketPath)) rmSync(input.socketPath, { force: true });
   const server = createServer((socket) => {
@@ -20,7 +28,7 @@ export async function startControlServer(input: {
       while (newline >= 0) {
         const line = buffer.slice(0, newline);
         buffer = buffer.slice(newline + 1);
-        handleLine(line, socket, input.getStatus);
+        void handleLine(line, socket, input);
         newline = buffer.indexOf('\n');
       }
     });
@@ -34,17 +42,40 @@ export async function startControlServer(input: {
   };
 }
 
-function handleLine(line: string, socket: Socket, getStatus: () => DaemonStatus): void {
-  const response = buildResponse(line, getStatus);
+async function handleLine(
+  line: string,
+  socket: Socket,
+  input: {
+    getStatus: () => DaemonStatus;
+    deliverWeChatDailyReview?: (
+      payload: Extract<ControlRequest, { method: 'wechat.dailyReview.deliver' }>['payload'],
+    ) => Promise<WeChatDailyReviewDaemonDeliveryResult> | WeChatDailyReviewDaemonDeliveryResult;
+  },
+): Promise<void> {
+  const response = await buildResponse(line, input);
   socket.write(`${JSON.stringify(response)}\n`);
 }
 
-function buildResponse(line: string, getStatus: () => DaemonStatus): ControlResponse {
+async function buildResponse(
+  line: string,
+  input: {
+    getStatus: () => DaemonStatus;
+    deliverWeChatDailyReview?: (
+      payload: Extract<ControlRequest, { method: 'wechat.dailyReview.deliver' }>['payload'],
+    ) => Promise<WeChatDailyReviewDaemonDeliveryResult> | WeChatDailyReviewDaemonDeliveryResult;
+  },
+): Promise<ControlResponse> {
   try {
     const request = JSON.parse(line) as Partial<ControlRequest>;
     const id = typeof request.id === 'string' ? request.id : 'unknown';
     if (request.method === 'status') {
-      return { id, ok: true, result: getStatus() };
+      return { id, ok: true, result: input.getStatus() };
+    }
+    if (request.method === 'wechat.dailyReview.deliver') {
+      if (!input.deliverWeChatDailyReview)
+        return { id, ok: false, error: 'WeChat daily review delivery is unavailable.' };
+      if (!request.payload) return { id, ok: false, error: 'WeChat daily review delivery payload is required.' };
+      return { id, ok: true, result: await input.deliverWeChatDailyReview(request.payload) };
     }
     return { id, ok: false, error: 'Unsupported control method.' };
   } catch (error) {

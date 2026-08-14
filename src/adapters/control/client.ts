@@ -1,8 +1,15 @@
 import { createConnection } from 'node:net';
-import type { ControlRequest, ControlResponse, DaemonStatus } from './protocol.js';
+import type { DailyReviewIntegrationPayload } from '../../integrations/daily-pack.js';
+import type {
+  ControlRequest,
+  ControlResponse,
+  DaemonStatus,
+  WeChatDailyReviewDaemonDeliveryResult,
+} from './protocol.js';
 
 export interface ControlClient {
   status(): Promise<DaemonStatus>;
+  deliverWeChatDailyReview(payload: DailyReviewIntegrationPayload): Promise<WeChatDailyReviewDaemonDeliveryResult>;
 }
 
 export interface ControlClientOptions {
@@ -13,7 +20,20 @@ const DEFAULT_CONTROL_REQUEST_TIMEOUT_MS = 2_000;
 
 export function createControlClient(socketPath: string, options: ControlClientOptions = {}): ControlClient {
   return {
-    status: () => request(socketPath, { id: `${Date.now()}-${Math.random()}`, method: 'status' }, options),
+    status: async () => {
+      const result = await request(socketPath, { id: requestId(), method: 'status' }, options);
+      if (!('ok' in result)) throw new Error('Daemon returned an invalid status response.');
+      return result;
+    },
+    deliverWeChatDailyReview: async (payload) => {
+      const result = await request(
+        socketPath,
+        { id: requestId(), method: 'wechat.dailyReview.deliver', payload },
+        options,
+      );
+      if ('ok' in result) throw new Error('Daemon returned an invalid WeChat delivery response.');
+      return result;
+    },
   };
 }
 
@@ -21,10 +41,14 @@ async function request(
   socketPath: string,
   payload: ControlRequest,
   options: ControlClientOptions,
-): Promise<DaemonStatus> {
+): Promise<DaemonStatus | WeChatDailyReviewDaemonDeliveryResult> {
   const response = await rawRequest(socketPath, payload, options);
   if (!response.ok) throw new Error(response.error);
   return response.result;
+}
+
+function requestId(): string {
+  return `${Date.now()}-${Math.random()}`;
 }
 
 function rawRequest(
