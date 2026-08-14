@@ -6,7 +6,12 @@ import { runDaemonCommand, runDaemonCommandAsync, runRunCommand } from './cli-da
 import { runEval, runEvalAsync } from './cli-eval.js';
 import { runGate } from './cli-gate.js';
 import { runInstall, runUninstall } from './cli-installer.js';
-import { runIntegrationAccountValidate, runIntegrations, runIntegrationSend } from './cli-integrations.js';
+import {
+  runIntegrationAccountValidate,
+  runIntegrationDeliver,
+  runIntegrations,
+  runIntegrationSend,
+} from './cli-integrations.js';
 import { runCheck, runCoach, runHook, runPronounce } from './cli-language.js';
 import { runMcp } from './cli-mcp.js';
 import {
@@ -86,6 +91,9 @@ export async function runCliAsync(argv: string[], stdin = '', options: CliAsyncO
   }
   if (command === 'integrations' && args[0] === 'send') {
     return runIntegrationSend(args, options);
+  }
+  if (command === 'integrations' && args[0] === 'deliver') {
+    return runIntegrationDeliver(args);
   }
   if (command === 'integrations' && args[0] === 'account-validate') {
     return runIntegrationAccountValidate(args, options);

@@ -1,3 +1,5 @@
+import type { DailyReviewIntegrationPayload } from '../../integrations/daily-pack.js';
+
 export type ChannelRuntimeState = 'disabled' | 'ready' | 'starting' | 'running' | 'failed';
 
 export interface DaemonStatus {
@@ -11,16 +13,33 @@ export interface DaemonStatus {
   uncleanRestart?: boolean;
 }
 
-export type ControlRequest = {
-  id: string;
-  method: 'status';
-};
+export interface WeChatDailyReviewDaemonDeliveryResult {
+  operation: 'wechat-daily-review-daemon-delivery';
+  delivered: boolean;
+  network: boolean;
+  accountCount: number;
+  recipientCount: number;
+  messagePreview: string;
+  blocker?: string;
+  errors?: string[];
+}
+
+export type ControlRequest =
+  | {
+      id: string;
+      method: 'status';
+    }
+  | {
+      id: string;
+      method: 'wechat.dailyReview.deliver';
+      payload: DailyReviewIntegrationPayload;
+    };
 
 export type ControlResponse =
   | {
       id: string;
       ok: true;
-      result: DaemonStatus;
+      result: DaemonStatus | WeChatDailyReviewDaemonDeliveryResult;
     }
   | {
       id: string;

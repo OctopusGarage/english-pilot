@@ -13,6 +13,9 @@ import { detectUncleanRestart, markCleanShutdown, markRunning } from '../../src/
 import { ensureRuntimeLayout } from '../../src/core/infra/state-dir.js';
 import { startConfiguredChannelRuntimes } from '../../src/daemon/channel-lifecycle.js';
 import { getDaemonStatusSnapshot, runDaemon } from '../../src/daemon/run-daemon.js';
+import { createWeChatDailyReviewDeliveryHandler } from '../../src/daemon/wechat-daily-review-delivery.js';
+import { buildDailyReviewDeliveryPayload } from '../../src/integrations/daily-review-delivery.js';
+import { findIntegrationTarget } from '../../src/integrations/targets.js';
 
 describe('daemon runtime infrastructure', () => {
   let previousHome: string | undefined;
@@ -170,6 +173,209 @@ describe('daemon runtime infrastructure', () => {
           wechat: 'disabled',
         },
       });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('reports an actionable blocker when WeChat daily review delivery has no daemon socket', async () => {
+    const result = await runCliAsync([
+      'integrations',
+      'deliver',
+      '--target',
+      'wechat',
+      '--date',
+      '2026-08-14',
+      '--json',
+    ]);
+
+    expect(result).toMatchObject({
+      exitCode: 1,
+      stderr: '',
+    });
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      operation: 'wechat-daily-review-daemon-delivery',
+      delivered: false,
+      network: false,
+      blocker: expect.stringContaining('EnglishPilot daemon is not reachable'),
+    });
+  });
+
+  it('blocks WeChat daily review control delivery when the WeChat daemon channel is not running', async () => {
+    const layout = ensureRuntimeLayout();
+    const target = findIntegrationTarget('wechat');
+    if (!target) throw new Error('missing wechat target');
+    const server = await startControlServer({
+      socketPath: layout.controlSocketPath,
+      getStatus: () => ({
+        ok: true,
+        pid: 42,
+        startedAt: '2026-08-14T00:00:00.000Z',
+        channels: {
+          feishu: 'disabled',
+          wechat: 'ready',
+        },
+      }),
+      deliverWeChatDailyReview: createWeChatDailyReviewDeliveryHandler({
+        channels: {
+          feishu: 'disabled',
+          wechat: 'ready',
+        },
+        loadConfig: () => ({
+          ok: false,
+          missing: ['WECHAT_ACCOUNT', 'WECHAT_ALLOWED_USERS'],
+          config: {
+            accounts: [],
+            allowedUsers: new Set(),
+            replyMode: 'violation',
+            botAgent: 'EnglishPilot/0.1.0',
+          },
+        }),
+        sendText: async () => ({ sent: true }),
+      }),
+    });
+
+    try {
+      const result = await createControlClient(layout.controlSocketPath).deliverWeChatDailyReview(
+        buildDailyReviewDeliveryPayload({ target, date: '2026-08-14', items: [] }),
+      );
+
+      expect(result).toMatchObject({
+        operation: 'wechat-daily-review-daemon-delivery',
+        delivered: false,
+        network: false,
+        blocker: expect.stringContaining('WeChat daemon channel is not running'),
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('blocks WeChat daily review control delivery when no allowed account or recipient is ready', async () => {
+    const layout = ensureRuntimeLayout();
+    const target = findIntegrationTarget('wechat');
+    if (!target) throw new Error('missing wechat target');
+    const server = await startControlServer({
+      socketPath: layout.controlSocketPath,
+      getStatus: () => ({
+        ok: true,
+        pid: 42,
+        startedAt: '2026-08-14T00:00:00.000Z',
+        channels: {
+          feishu: 'disabled',
+          wechat: 'running',
+        },
+      }),
+      deliverWeChatDailyReview: createWeChatDailyReviewDeliveryHandler({
+        channels: {
+          feishu: 'disabled',
+          wechat: 'running',
+        },
+        loadConfig: () => ({
+          ok: false,
+          missing: ['WECHAT_ACCOUNT', 'WECHAT_ALLOWED_USERS'],
+          config: {
+            accounts: [],
+            allowedUsers: new Set(),
+            replyMode: 'violation',
+            botAgent: 'EnglishPilot/0.1.0',
+          },
+        }),
+        sendText: async () => {
+          throw new Error('blocked delivery must not send');
+        },
+      }),
+    });
+
+    try {
+      const result = await createControlClient(layout.controlSocketPath).deliverWeChatDailyReview(
+        buildDailyReviewDeliveryPayload({ target, date: '2026-08-14', items: [] }),
+      );
+
+      expect(result).toMatchObject({
+        operation: 'wechat-daily-review-daemon-delivery',
+        delivered: false,
+        network: false,
+        accountCount: 0,
+        recipientCount: 0,
+        blocker: expect.stringContaining('WeChat long-connection account/channel is not ready'),
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('delivers a prepared daily review payload through a fake WeChat long connection without leaking secrets', async () => {
+    const layout = ensureRuntimeLayout();
+    const target = findIntegrationTarget('wechat');
+    if (!target) throw new Error('missing wechat target');
+    const sent: Array<{ to: string; text: string; token?: string; baseUrl?: string }> = [];
+    const account = {
+      accountId: 'bot-im-bot',
+      token: 'secret-token',
+      baseUrl: 'https://ilinkai.weixin.qq.com',
+      userId: 'wxid_owner@im.wechat',
+      savedAt: '2026-08-14T00:00:00.000Z',
+    };
+    const server = await startControlServer({
+      socketPath: layout.controlSocketPath,
+      getStatus: () => ({
+        ok: true,
+        pid: 42,
+        startedAt: '2026-08-14T00:00:00.000Z',
+        channels: {
+          feishu: 'disabled',
+          wechat: 'running',
+        },
+      }),
+      deliverWeChatDailyReview: createWeChatDailyReviewDeliveryHandler({
+        channels: {
+          feishu: 'disabled',
+          wechat: 'running',
+        },
+        loadConfig: () => ({
+          ok: true,
+          missing: [],
+          config: {
+            accounts: [account],
+            allowedUsers: new Set(['wxid_owner@im.wechat']),
+            replyMode: 'violation',
+            botAgent: 'EnglishPilot/0.1.0',
+          },
+        }),
+        sendText: async (input) => {
+          sent.push({
+            to: input.to,
+            text: input.text,
+            token: input.account.token,
+            baseUrl: input.account.baseUrl,
+          });
+          return { sent: true };
+        },
+      }),
+    });
+
+    try {
+      const result = await createControlClient(layout.controlSocketPath).deliverWeChatDailyReview(
+        buildDailyReviewDeliveryPayload({ target, date: '2026-08-14', items: [] }),
+      );
+
+      expect(sent).toEqual([
+        expect.objectContaining({
+          to: 'wxid_owner@im.wechat',
+          text: expect.stringContaining('EnglishPilot Daily Review - 2026-08-14'),
+        }),
+      ]);
+      expect(result).toMatchObject({
+        operation: 'wechat-daily-review-daemon-delivery',
+        delivered: true,
+        network: true,
+        accountCount: 1,
+        recipientCount: 1,
+        messagePreview: expect.stringContaining('EnglishPilot Daily Review - 2026-08-14'),
+      });
+      expect(JSON.stringify(result)).not.toContain('secret-token');
+      expect(JSON.stringify(result)).not.toContain('ilinkai.weixin.qq.com');
     } finally {
       await server.close();
     }

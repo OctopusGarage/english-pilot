@@ -595,6 +595,7 @@ describe('runCli', () => {
           'integrations message-coaching --record',
           'integrations event-coaching',
           'integrations deliver',
+          'integrations deliver --target wechat',
           'doctor',
         ]),
         mcp: expect.arrayContaining([
@@ -625,7 +626,8 @@ describe('runCli', () => {
           'WeChat conversation thread resume',
           'WeChat voice transcript-to-agent routing',
           'WeChat long-connection reconnect and session refresh guidance',
-          'WeChat account-validation-gated sender',
+          'WeChat daemon-mediated daily-review delivery',
+          'Deprecated WeChat direct HTTP/request-preview sender block',
         ]),
         voice: [],
       },

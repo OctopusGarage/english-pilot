@@ -70,7 +70,7 @@ export const integrationsMcpToolDefinitions = [
   {
     name: 'english_integration_send',
     description:
-      'Send a daily review pack to WeChat using environment credentials. Requires send: true and can require prior account validation history.',
+      'Deprecated direct WeChat daily-review send surface. Requires send: true, but returns the long-connection blocker instead of using request-preview HTTP sending.',
     inputSchema: {
       target: z.literal('wechat'),
       date: z.string().optional(),
