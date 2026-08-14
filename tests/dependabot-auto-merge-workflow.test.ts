@@ -38,17 +38,13 @@ const readWorkflow = (): Workflow =>
 
 describe('Dependabot auto-merge workflow', () => {
   it('declares the YAML parser used by workflow tests', () => {
-    const manifest = JSON.parse(
-      readFileSync(join(root, 'package.json'), 'utf8'),
-    ) as PackageManifest;
+    const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as PackageManifest;
 
     expect(manifest.devDependencies.yaml).toBe('^2.9.0');
   });
 
   it('locks the MCP SDK at the audited safe release', () => {
-    const lockfile = JSON.parse(
-      readFileSync(join(root, 'package-lock.json'), 'utf8'),
-    ) as PackageLock;
+    const lockfile = JSON.parse(readFileSync(join(root, 'package-lock.json'), 'utf8')) as PackageLock;
 
     expect(lockfile.packages['node_modules/@modelcontextprotocol/sdk']?.version).toBe('1.30.0');
   });
