@@ -30,6 +30,7 @@ export function buildWeChatConversationEnvelope(input: {
   const sendText = input.sendText ?? sendWeChatText;
   const contextTokenForReply = contextToken || getWeChatContextToken(input.account.accountId, senderId);
   const messageId = String(input.message.message_id ?? '');
+  const replyTarget = chat.chatType === 'group' ? chat.chatId : senderId;
 
   return buildExternalChannelInboundEnvelope({
     channel: 'wechat',
@@ -58,7 +59,7 @@ export function buildWeChatConversationEnvelope(input: {
     sendText: (replyText) =>
       sendText({
         account: input.account,
-        to: senderId,
+        to: replyTarget,
         text: replyText,
         contextToken: contextTokenForReply,
         botAgent: input.config.botAgent,

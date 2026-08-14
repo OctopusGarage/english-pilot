@@ -298,6 +298,34 @@ describe('WeChat long-connection channel', () => {
     expect(sent).toEqual(['Received. Working on it...', 'Here is a concise reply.']);
   });
 
+  it('sends WeChat group replies back to the room instead of direct messaging the sender', async () => {
+    runCli(['config', 'set', 'externalAgentBackend', 'codex']);
+    const recipients: string[] = [];
+    const account = accountFixture();
+
+    const result = await handleWeChatMessage({
+      account,
+      config: {
+        accounts: [account],
+        allowedUsers: new Set(['wxid_owner@im.wechat']),
+        replyMode: 'violation',
+        botAgent: 'EnglishPilot/0.1.0',
+      },
+      message: {
+        ...wechatTextMessage('Please summarize this group thread.'),
+        room_id: 'room-alpha@chatroom',
+      },
+      runAgent: async (options) => agentResult('codex', options.prompt, { threadId: 'group-thread' }),
+      sendText: async (input) => {
+        recipients.push(input.to);
+        return { sent: true };
+      },
+    });
+
+    expect(result).toMatchObject({ handled: true, replied: true });
+    expect(recipients).toEqual(['room-alpha@chatroom']);
+  });
+
   it('records the final English note from a WeChat agent reply', async () => {
     runCli(['config', 'set', 'externalAgentBackend', 'codex']);
     const account = accountFixture();
