@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer, type Socket } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -47,6 +47,9 @@ describe('daemon runtime infrastructure', () => {
     expect(layout.controlSocketPath).toBe(join(home, 'run', 'english-pilot.sock'));
     expect(existsSync(layout.logsDir)).toBe(true);
     expect(existsSync(layout.runDir)).toBe(true);
+    expect(statSync(layout.home).mode & 0o077).toBe(0);
+    expect(statSync(layout.logsDir).mode & 0o077).toBe(0);
+    expect(statSync(layout.runDir).mode & 0o077).toBe(0);
   });
 
   it('prevents duplicate daemon instances with an atomic lock', () => {
@@ -173,6 +176,7 @@ describe('daemon runtime infrastructure', () => {
           wechat: 'disabled',
         },
       });
+      expect(statSync(layout.controlSocketPath).mode & 0o077).toBe(0);
     } finally {
       await server.close();
     }
