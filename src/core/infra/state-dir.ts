@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs';
+import { chmodSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -37,8 +37,13 @@ export function getRuntimeLayout(): RuntimeLayout {
 
 export function ensureRuntimeLayout(): RuntimeLayout {
   const layout = getRuntimeLayout();
-  mkdirSync(layout.home, { recursive: true });
-  mkdirSync(layout.logsDir, { recursive: true });
-  mkdirSync(layout.runDir, { recursive: true });
+  mkdirPrivate(layout.home);
+  mkdirPrivate(layout.logsDir);
+  mkdirPrivate(layout.runDir);
   return layout;
+}
+
+function mkdirPrivate(path: string): void {
+  mkdirSync(path, { recursive: true, mode: 0o700 });
+  chmodSync(path, 0o700);
 }
