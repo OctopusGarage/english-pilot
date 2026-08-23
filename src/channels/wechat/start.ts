@@ -129,8 +129,8 @@ export async function monitorWeChatAccount(input: {
     notifyStart: input.notifyStart,
     notifyStop: input.notifyStop,
     sleep: input.sleep,
-    onMessage: (message) => {
-      void handleWeChatMessage({
+    onMessage: async (message) => {
+      await handleWeChatMessage({
         account: input.account,
         config: input.config,
         message,

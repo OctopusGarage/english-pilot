@@ -13,7 +13,7 @@ export interface WeChatUpdateStreamInput {
   notifyStop?: typeof notifyWeChatStop;
   sleep?: (ms: number) => Promise<void>;
   logger?: RuntimeLogger;
-  onMessage: (message: WeChatUpdateMessage) => void;
+  onMessage: (message: WeChatUpdateMessage) => void | Promise<void>;
 }
 
 export async function runWeChatUpdateStream(input: WeChatUpdateStreamInput): Promise<void> {
@@ -112,17 +112,17 @@ export async function runWeChatUpdateStream(input: WeChatUpdateStreamInput): Pro
         timeoutMs = updates.longpolling_timeout_ms;
         logger?.debug('wechat.getupdates.timeout_updated', 'WeChat long polling timeout updated.', { timeoutMs });
       }
-      if (updates.get_updates_buf) {
-        cursor = updates.get_updates_buf;
-        saveWeChatSyncCursor(input.account.accountId, cursor);
-      }
       for (const message of updates.msgs ?? []) {
         logger?.info('wechat.message.received', 'WeChat message received from update stream.', {
           messageId: message.message_id,
           fromUserId: message.from_user_id,
           messageType: message.message_type,
         });
-        input.onMessage(message);
+        await input.onMessage(message);
+      }
+      if (updates.get_updates_buf) {
+        cursor = updates.get_updates_buf;
+        saveWeChatSyncCursor(input.account.accountId, cursor);
       }
     }
   } finally {
