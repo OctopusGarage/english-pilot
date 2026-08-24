@@ -29,6 +29,7 @@ export async function startFeishuChannel(
     dryRun?: boolean;
     log?: (line: string) => void;
     logger?: RuntimeLogger;
+    abortSignal?: AbortSignal;
   } = {},
 ): Promise<FeishuStartPreview> {
   const report = input.config
@@ -69,6 +70,7 @@ export async function startFeishuChannel(
     });
   });
   await channel.connect();
+  disconnectOnAbort(channel, input.abortSignal, input.log, input.logger);
   input.log?.(`EnglishPilot Feishu channel is listening on ${report.config.domain}.`);
   input.logger?.info('feishu.channel.listening', 'EnglishPilot Feishu channel is listening.', {
     domain: report.config.domain,
@@ -129,4 +131,27 @@ function createChannel(config: FeishuChannelConfig): LarkChannel {
       },
     },
   });
+}
+
+function disconnectOnAbort(
+  channel: LarkChannel,
+  abortSignal: AbortSignal | undefined,
+  log: ((line: string) => void) | undefined,
+  logger: RuntimeLogger | undefined,
+): void {
+  if (!abortSignal) return;
+  const disconnect = (): void => {
+    void channel.disconnect().catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      log?.(`Feishu channel disconnect failed: ${message}`);
+      logger?.warn('feishu.channel.disconnect_failed', 'Feishu channel disconnect failed.', {
+        error: message,
+      });
+    });
+  };
+  if (abortSignal.aborted) {
+    disconnect();
+    return;
+  }
+  abortSignal.addEventListener('abort', disconnect, { once: true });
 }
