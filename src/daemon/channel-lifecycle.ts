@@ -29,7 +29,7 @@ export function defaultDaemonChannelRuntimes(input: {
     {
       name: 'feishu',
       ready: input.feishuReady,
-      start: ({ log, logger }) => startFeishuChannel({ log, logger }),
+      start: ({ log, logger, abortSignal }) => startFeishuChannel({ log, logger, abortSignal }),
     },
     {
       name: 'wechat',
