@@ -52,6 +52,7 @@ describe('runCli', () => {
     expect(result.stdout).toContain(
       'english-pilot agent run --text "..." [--backend claude|codex] [--cwd <path>] [--dry-run] [--json]',
     );
+    expect(result.stdout).toContain('english-pilot integrations deliver --target wechat [--date YYYY-MM-DD] [--json]');
     expect(result.stdout).toContain(
       'english-pilot gate disable (--repo-ignore|--global-ignore) [--cwd <path>] [--json]',
     );

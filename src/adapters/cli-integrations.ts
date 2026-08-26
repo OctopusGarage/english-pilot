@@ -292,6 +292,7 @@ export function runIntegrations(args: string[]): CliResult {
       '  english-pilot integrations message-coaching --target <target> --text "..." [--record] [--json]',
       '  english-pilot integrations event-coaching --target wechat --event-json <json> [--record] [--json]',
       '  english-pilot integrations deliver --target obsidian [--date YYYY-MM-DD] [--dir <path>] [--write] [--json]',
+      '  english-pilot integrations deliver --target wechat [--date YYYY-MM-DD] [--json]',
       '',
     ].join('\n'),
   };
