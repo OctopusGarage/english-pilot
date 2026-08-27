@@ -442,7 +442,13 @@ function readJsonLines<T>(path: string): T[] {
   return readFileSync(path, 'utf8')
     .split('\n')
     .filter((line) => line.trim().length > 0)
-    .map((line) => JSON.parse(line) as T);
+    .flatMap((line) => {
+      try {
+        return [JSON.parse(line) as T];
+      } catch {
+        return [];
+      }
+    });
 }
 
 function createId(prefix: string): string {

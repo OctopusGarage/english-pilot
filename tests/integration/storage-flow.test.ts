@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -91,6 +91,29 @@ describe('local learning storage flow', () => {
     expect(readFileSync(join(home, 'learning-items.jsonl'), 'utf8')).toContain('"lapseCount":1');
     expect(JSON.parse(runCli(['stats', '--json']).stdout)).toMatchObject({
       promptEvents: 1,
+      learningItems: 1,
+    });
+  });
+
+  it('skips malformed JSONL learning-item lines without losing valid review items', () => {
+    expect(runCli(['config', 'set', 'storage', 'jsonl']).exitCode).toBe(0);
+
+    const original = '我想创建一个 new project，用来辅助英语学习。';
+    runCli(['check', '--text', original, '--json']);
+    writeFileSync(join(home, 'learning-items.jsonl'), '{not json}\n', { flag: 'a' });
+
+    const review = runCli(['review', '--json']);
+    const stats = runCli(['stats', '--json']);
+
+    expect(review.exitCode).toBe(0);
+    expect(review.stderr).toBe('');
+    expect(JSON.parse(review.stdout)).toMatchObject([
+      {
+        original,
+        suggested: expect.stringContaining('create a new project'),
+      },
+    ]);
+    expect(JSON.parse(stats.stdout)).toMatchObject({
       learningItems: 1,
     });
   });

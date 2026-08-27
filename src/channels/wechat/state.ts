@@ -30,15 +30,19 @@ export function listWeChatAccounts(): WeChatAccount[] {
 export function loadWeChatAccount(accountId: string): WeChatAccount | undefined {
   const path = accountPath(normalizeWeChatAccountId(accountId));
   if (!existsSync(path)) return undefined;
-  const value = JSON.parse(readFileSync(path, 'utf8')) as Partial<WeChatAccount>;
-  if (!value.accountId || !value.token) return undefined;
-  return {
-    accountId: value.accountId,
-    token: value.token,
-    baseUrl: value.baseUrl?.trim() || defaultWeChatBaseUrl(),
-    ...(value.userId ? { userId: value.userId } : {}),
-    savedAt: value.savedAt ?? new Date(0).toISOString(),
-  };
+  try {
+    const value = JSON.parse(readFileSync(path, 'utf8')) as Partial<WeChatAccount>;
+    if (!value.accountId || !value.token) return undefined;
+    return {
+      accountId: value.accountId,
+      token: value.token,
+      baseUrl: value.baseUrl?.trim() || defaultWeChatBaseUrl(),
+      ...(value.userId ? { userId: value.userId } : {}),
+      savedAt: value.savedAt ?? new Date(0).toISOString(),
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 export function saveWeChatAccount(input: {
