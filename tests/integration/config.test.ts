@@ -43,6 +43,14 @@ describe('config commands', () => {
       storage: 'sqlite',
       externalAgentBackend: 'off',
       externalAgentCodexSandbox: 'workspace-write',
+      assistantEnglishNoteStyle: 'software-engineering',
+      assistantEnglishNoteReferencePaths: [
+        '/Users/kingsonwu/programming/kingson4wu/computer-english/most-frequent-technology-english-words.txt',
+        '/Users/kingsonwu/programming/kingson4wu/computer-english/MIT6.824.md',
+        '/Users/kingsonwu/programming/kingson4wu/computer-english/heima.txt',
+        '/Users/kingsonwu/programming/kingson4wu/computer-english/1700.txt',
+        '/Users/kingsonwu/programming/kingson4wu/computer-english/600.txt',
+      ],
     });
   });
 
@@ -98,6 +106,19 @@ describe('config commands', () => {
     expect(JSON.parse(getResult.stdout).disabledProjectPaths).toEqual(['/tmp/a', '/tmp/b']);
   });
 
+  it('persists assistant English note reference path overrides', () => {
+    const setStyle = runCli(['config', 'set', 'assistantEnglishNoteStyle', 'general']);
+    const setPaths = runCli(['config', 'set', 'assistantEnglishNoteReferencePaths', '/tmp/terms.txt,/tmp/systems.md']);
+    const getResult = runCli(['config', 'get']);
+
+    expect(setStyle.exitCode).toBe(0);
+    expect(setPaths.exitCode).toBe(0);
+    expect(JSON.parse(getResult.stdout)).toMatchObject({
+      assistantEnglishNoteStyle: 'general',
+      assistantEnglishNoteReferencePaths: ['/tmp/terms.txt', '/tmp/systems.md'],
+    });
+  });
+
   it('rejects ratio config values outside their valid range', () => {
     const highMax = runCli(['config', 'set', 'maxChineseRatio', '1.5']);
     const negativeTarget = runCli(['config', 'set', 'targetChineseRatio', '-0.1']);
@@ -119,6 +140,7 @@ describe('config commands', () => {
     const agentBackend = runCli(['config', 'set', 'externalAgentBackend', 'gemini']);
     const codexSandbox = runCli(['config', 'set', 'externalAgentCodexSandbox', 'root']);
     const gateMode = runCli(['config', 'set', 'gateMode', 'block']);
+    const noteStyle = runCli(['config', 'set', 'assistantEnglishNoteStyle', 'academic']);
 
     expect(intensity.exitCode).toBe(1);
     expect(intensity.stderr).toContain('coachingIntensity must be one of: low, medium, high, force');
@@ -136,6 +158,8 @@ describe('config commands', () => {
     );
     expect(gateMode.exitCode).toBe(1);
     expect(gateMode.stderr).toContain('gateMode must be one of: enforce, coach');
+    expect(noteStyle.exitCode).toBe(1);
+    expect(noteStyle.stderr).toContain('assistantEnglishNoteStyle must be one of: general, software-engineering');
   });
 
   it('supports scheduled ratio progression opt-in while rejecting unsupported modes', () => {

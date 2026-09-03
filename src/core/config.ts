@@ -270,6 +270,9 @@ function parseStringConfigValue<K extends keyof EnglishPilotConfig>(key: K, valu
   if (key === 'ratioProgression') {
     return parseOneOf(key, value, ['manual', 'scheduled']) as EnglishPilotConfig[K];
   }
+  if (key === 'assistantEnglishNoteStyle') {
+    return parseOneOf(key, value, ['general', 'software-engineering']) as EnglishPilotConfig[K];
+  }
   if (key === 'storage') return parseOneOf(key, value, ['sqlite', 'jsonl']) as EnglishPilotConfig[K];
   if (key === 'rewriteBackend') return parseOneOf(key, value, ['off', 'argos']) as EnglishPilotConfig[K];
   if (key === 'externalAgentBackend')
@@ -302,10 +305,12 @@ function validateConfig(config: EnglishPilotConfig): EnglishPilotConfig {
     'workspace-write',
     'danger-full-access',
   ]);
+  validateOneOf('assistantEnglishNoteStyle', config.assistantEnglishNoteStyle, ['general', 'software-engineering']);
   validateBoolean('preferEnglishLeading', config.preferEnglishLeading);
   validateBoolean('ignoreCodePathsUrls', config.ignoreCodePathsUrls);
   validateBoolean('blockWithRewrite', config.blockWithRewrite);
   validateBoolean('recordAllowedPrompts', config.recordAllowedPrompts);
+  validateStringArray('assistantEnglishNoteReferencePaths', config.assistantEnglishNoteReferencePaths);
   validateStringArray('disabledProjectPaths', config.disabledProjectPaths);
   validateNonNegativeInteger('ignoreShortCjkFragmentsUnder', config.ignoreShortCjkFragmentsUnder);
   validateNonNegativeInteger('coachingCooldownMinutes', config.coachingCooldownMinutes);
