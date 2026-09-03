@@ -70,6 +70,27 @@ describe('inline coaching policy', () => {
     });
   });
 
+  it('adds software-engineering guidance to assistant-facing coaching context', () => {
+    runCli(['config', 'use', 'force']);
+
+    const result = runCli(['coach', 'context', '--json']);
+    const context = JSON.parse(result.stdout);
+
+    expect(result.exitCode).toBe(0);
+    expect(context).toMatchObject({
+      domainReference: {
+        style: 'software-engineering',
+        examples: expect.arrayContaining([
+          'append an English note at the end',
+          'make the failure path explicit',
+          'this change belongs at the module boundary',
+        ]),
+      },
+    });
+    expect(context.finalResponseInstruction).toContain('For programming-task conversations');
+    expect(context.finalResponseInstruction).toContain('software-engineering English');
+  });
+
   it('suppresses coaching notes during the cooldown window', () => {
     runCli([
       'check',

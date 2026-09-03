@@ -1,11 +1,17 @@
 import type { EnglishPilotConfig } from './types.js';
 import type { PromptEvent } from '../storage/repository.js';
+import {
+  buildAssistantNoteDomainGuidance,
+  loadAssistantNoteDomainReference,
+  type AssistantNoteDomainReference,
+} from './domain-reference.js';
 
 export type InlineCoachingDecisionReason = 'available' | 'intensity-low' | 'daily-cap-reached' | 'cooldown-active';
 
 export interface CoachingContext {
   guidance: string;
   finalResponseInstruction: string;
+  domainReference: AssistantNoteDomainReference;
   cadence: string;
   policy: {
     gateMode: EnglishPilotConfig['gateMode'];
@@ -44,6 +50,11 @@ export function buildCoachingContext(input: {
   const cooldownActive = cooldownUntil !== undefined && cooldownUntil.getTime() > now.getTime();
   const forceMode = input.config.coachingIntensity === 'force';
   const coachMode = input.config.gateMode === 'coach';
+  const domainReference = loadAssistantNoteDomainReference({
+    style: input.config.assistantEnglishNoteStyle,
+    paths: input.config.assistantEnglishNoteReferencePaths,
+  });
+  const domainGuidance = buildAssistantNoteDomainGuidance(domainReference);
   const reason = decideInlineCoaching({
     intensity: input.config.coachingIntensity,
     remaining,
@@ -67,7 +78,9 @@ export function buildCoachingContext(input: {
         ? 'For the latest allowed user prompt, append one concise note if it contains any Chinese fragment, awkward English, or obvious phrasing improvement:'
         : 'If the latest allowed user prompt contains Chinese or awkward English, append one concise note:',
       'English note: "original phrase" -> "more natural English"; Why: one practical rule; IPA: key word /IPA/ when useful.',
+      domainGuidance,
     ].join(' '),
+    domainReference,
     cadence: [
       forceMode
         ? 'Force mode bypasses cooldown and daily-cap intent for teachable user prompts; keep the note compact and professional.'
