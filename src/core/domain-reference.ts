@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import type { EnglishPilotConfig } from './types.js';
 
 export interface AssistantNoteDomainReference {
@@ -40,14 +40,15 @@ export function loadAssistantNoteDomainReference(input: {
   const seen = new Set<string>();
 
   for (const path of input.paths) {
-    if (!existsSync(path)) {
+    const text = readReferenceFile(path);
+    if (text === undefined) {
       missingPaths.push(path);
       continue;
     }
 
     if (terms.length >= MAX_TERMS) continue;
 
-    for (const term of extractTechnologyTerms(readFileSync(path, 'utf8'))) {
+    for (const term of extractTechnologyTerms(text)) {
       const normalized = normalizeTerm(term);
       if (!normalized || seen.has(normalized)) continue;
       seen.add(normalized);
@@ -63,6 +64,15 @@ export function loadAssistantNoteDomainReference(input: {
     examples: SOFTWARE_ENGINEERING_EXAMPLES,
     missingPaths,
   };
+}
+
+function readReferenceFile(path: string): string | undefined {
+  try {
+    if (!statSync(path).isFile()) return undefined;
+    return readFileSync(path, 'utf8');
+  } catch {
+    return undefined;
+  }
 }
 
 export function buildAssistantNoteDomainGuidance(reference: AssistantNoteDomainReference): string {

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -68,6 +68,21 @@ describe('assistant note domain reference', () => {
 
     expect(reference.terms).toHaveLength(12);
     expect(reference.missingPaths).toEqual([missingPath]);
+  });
+
+  it('records directory paths as missing reference inputs without throwing', () => {
+    const filePath = join(dir, 'terms.txt');
+    const directoryPath = join(dir, 'reference-dir');
+    writeFileSync(filePath, 'cache: 缓存', 'utf8');
+    mkdirSync(directoryPath);
+
+    const reference = loadAssistantNoteDomainReference({
+      style: 'software-engineering',
+      paths: [filePath, directoryPath],
+    });
+
+    expect(reference.terms).toEqual(['cache']);
+    expect(reference.missingPaths).toEqual([directoryPath]);
   });
 
   it('returns neutral guidance for general style', () => {
