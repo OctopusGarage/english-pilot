@@ -25,13 +25,7 @@ export const defaultConfig: EnglishPilotConfig = {
   externalAgentCodexBinary: 'codex',
   externalAgentCodexSandbox: 'workspace-write',
   assistantEnglishNoteStyle: 'software-engineering',
-  assistantEnglishNoteReferencePaths: [
-    '/Users/kingsonwu/programming/kingson4wu/computer-english/most-frequent-technology-english-words.txt',
-    '/Users/kingsonwu/programming/kingson4wu/computer-english/MIT6.824.md',
-    '/Users/kingsonwu/programming/kingson4wu/computer-english/heima.txt',
-    '/Users/kingsonwu/programming/kingson4wu/computer-english/1700.txt',
-    '/Users/kingsonwu/programming/kingson4wu/computer-english/600.txt',
-  ],
+  assistantEnglishNoteReferencePaths: [],
   disabledProjectPaths: [],
 };
 

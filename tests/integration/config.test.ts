@@ -44,13 +44,7 @@ describe('config commands', () => {
       externalAgentBackend: 'off',
       externalAgentCodexSandbox: 'workspace-write',
       assistantEnglishNoteStyle: 'software-engineering',
-      assistantEnglishNoteReferencePaths: [
-        '/Users/kingsonwu/programming/kingson4wu/computer-english/most-frequent-technology-english-words.txt',
-        '/Users/kingsonwu/programming/kingson4wu/computer-english/MIT6.824.md',
-        '/Users/kingsonwu/programming/kingson4wu/computer-english/heima.txt',
-        '/Users/kingsonwu/programming/kingson4wu/computer-english/1700.txt',
-        '/Users/kingsonwu/programming/kingson4wu/computer-english/600.txt',
-      ],
+      assistantEnglishNoteReferencePaths: [],
     });
   });
 
@@ -110,6 +104,13 @@ describe('config commands', () => {
     const setStyle = runCli(['config', 'set', 'assistantEnglishNoteStyle', 'general']);
     const setPaths = runCli(['config', 'set', 'assistantEnglishNoteReferencePaths', '/tmp/terms.txt,/tmp/systems.md']);
     const getResult = runCli(['config', 'get']);
+    const setJsonPaths = runCli([
+      'config',
+      'set',
+      'assistantEnglishNoteReferencePaths',
+      '["/tmp/json-terms.txt","/tmp/json-systems.md"]',
+    ]);
+    const getJsonResult = runCli(['config', 'get']);
 
     expect(setStyle.exitCode).toBe(0);
     expect(setPaths.exitCode).toBe(0);
@@ -117,6 +118,11 @@ describe('config commands', () => {
       assistantEnglishNoteStyle: 'general',
       assistantEnglishNoteReferencePaths: ['/tmp/terms.txt', '/tmp/systems.md'],
     });
+    expect(setJsonPaths.exitCode).toBe(0);
+    expect(JSON.parse(getJsonResult.stdout).assistantEnglishNoteReferencePaths).toEqual([
+      '/tmp/json-terms.txt',
+      '/tmp/json-systems.md',
+    ]);
   });
 
   it('rejects ratio config values outside their valid range', () => {
