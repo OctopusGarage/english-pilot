@@ -45,6 +45,8 @@ export function loadAssistantNoteDomainReference(input: {
       continue;
     }
 
+    if (terms.length >= MAX_TERMS) continue;
+
     for (const term of extractTechnologyTerms(readFileSync(path, 'utf8'))) {
       const normalized = normalizeTerm(term);
       if (!normalized || seen.has(normalized)) continue;
@@ -52,8 +54,6 @@ export function loadAssistantNoteDomainReference(input: {
       terms.push(normalized);
       if (terms.length >= MAX_TERMS) break;
     }
-
-    if (terms.length >= MAX_TERMS) break;
   }
 
   return {

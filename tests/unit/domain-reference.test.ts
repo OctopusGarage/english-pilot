@@ -56,6 +56,20 @@ describe('assistant note domain reference', () => {
     expect(buildAssistantNoteDomainGuidance(reference)).toContain('make the failure path explicit');
   });
 
+  it('records missing paths after the term cap is reached', () => {
+    const fullPath = join(dir, 'full.txt');
+    const missingPath = join(dir, 'missing-after-full.txt');
+    writeFileSync(fullPath, Array.from({ length: 16 }, (_, index) => `term${index + 1}: example`).join('\n'), 'utf8');
+
+    const reference = loadAssistantNoteDomainReference({
+      style: 'software-engineering',
+      paths: [fullPath, missingPath],
+    });
+
+    expect(reference.terms).toHaveLength(12);
+    expect(reference.missingPaths).toEqual([missingPath]);
+  });
+
   it('returns neutral guidance for general style', () => {
     const reference = loadAssistantNoteDomainReference({
       style: 'general',
