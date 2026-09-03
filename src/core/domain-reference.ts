@@ -40,13 +40,18 @@ export function loadAssistantNoteDomainReference(input: {
   const seen = new Set<string>();
 
   for (const path of input.paths) {
-    const text = readReferenceFile(path);
-    if (text === undefined) {
+    if (!isReferenceFile(path)) {
       missingPaths.push(path);
       continue;
     }
 
     if (terms.length >= MAX_TERMS) continue;
+
+    const text = readReferenceFile(path);
+    if (text === undefined) {
+      missingPaths.push(path);
+      continue;
+    }
 
     for (const term of extractTechnologyTerms(text)) {
       const normalized = normalizeTerm(term);
@@ -66,9 +71,16 @@ export function loadAssistantNoteDomainReference(input: {
   };
 }
 
+function isReferenceFile(path: string): boolean {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
 function readReferenceFile(path: string): string | undefined {
   try {
-    if (!statSync(path).isFile()) return undefined;
     return readFileSync(path, 'utf8');
   } catch {
     return undefined;

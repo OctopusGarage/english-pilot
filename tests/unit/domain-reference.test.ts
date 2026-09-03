@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildAssistantNoteDomainGuidance, loadAssistantNoteDomainReference } from '../../src/core/domain-reference.js';
 
 describe('assistant note domain reference', () => {
@@ -68,6 +68,40 @@ describe('assistant note domain reference', () => {
 
     expect(reference.terms).toHaveLength(12);
     expect(reference.missingPaths).toEqual([missingPath]);
+  });
+
+  it('does not read later available files after the term cap is reached', async () => {
+    const fullPath = join(dir, 'full.txt');
+    const latePath = join(dir, 'late.txt');
+    const readPaths: string[] = [];
+
+    vi.resetModules();
+    vi.doMock('node:fs', () => ({
+      readFileSync: (path: string) => {
+        readPaths.push(path);
+        if (path === latePath) throw new Error('late file should not be read');
+        return Array.from({ length: 16 }, (_, index) => `term${index + 1}: example`).join('\n');
+      },
+      statSync: () => ({
+        isFile: () => true,
+      }),
+    }));
+
+    try {
+      const { loadAssistantNoteDomainReference: loadWithMockedFs } = await import('../../src/core/domain-reference.js');
+
+      const reference = loadWithMockedFs({
+        style: 'software-engineering',
+        paths: [fullPath, latePath],
+      });
+
+      expect(reference.terms).toHaveLength(12);
+      expect(reference.missingPaths).toEqual([]);
+      expect(readPaths).toEqual([fullPath]);
+    } finally {
+      vi.doUnmock('node:fs');
+      vi.resetModules();
+    }
   });
 
   it('records directory paths as missing reference inputs without throwing', () => {
