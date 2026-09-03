@@ -77,6 +77,10 @@ describe('assistant note domain reference', () => {
 
     vi.resetModules();
     vi.doMock('node:fs', () => ({
+      accessSync: () => undefined,
+      constants: {
+        R_OK: 4,
+      },
       readFileSync: (path: string) => {
         readPaths.push(path);
         if (path === latePath) throw new Error('late file should not be read');
@@ -97,6 +101,46 @@ describe('assistant note domain reference', () => {
 
       expect(reference.terms).toHaveLength(12);
       expect(reference.missingPaths).toEqual([]);
+      expect(readPaths).toEqual([fullPath]);
+    } finally {
+      vi.doUnmock('node:fs');
+      vi.resetModules();
+    }
+  });
+
+  it('records unreadable regular files after the term cap without reading their contents', async () => {
+    const fullPath = join(dir, 'full.txt');
+    const unreadablePath = join(dir, 'unreadable-after-full.txt');
+    const readPaths: string[] = [];
+
+    vi.resetModules();
+    vi.doMock('node:fs', () => ({
+      accessSync: (path: string) => {
+        if (path === unreadablePath) throw new Error('permission denied');
+      },
+      constants: {
+        R_OK: 4,
+      },
+      readFileSync: (path: string) => {
+        readPaths.push(path);
+        if (path === unreadablePath) throw new Error('unreadable file should not be read');
+        return Array.from({ length: 16 }, (_, index) => `term${index + 1}: example`).join('\n');
+      },
+      statSync: () => ({
+        isFile: () => true,
+      }),
+    }));
+
+    try {
+      const { loadAssistantNoteDomainReference: loadWithMockedFs } = await import('../../src/core/domain-reference.js');
+
+      const reference = loadWithMockedFs({
+        style: 'software-engineering',
+        paths: [fullPath, unreadablePath],
+      });
+
+      expect(reference.terms).toHaveLength(12);
+      expect(reference.missingPaths).toEqual([unreadablePath]);
       expect(readPaths).toEqual([fullPath]);
     } finally {
       vi.doUnmock('node:fs');

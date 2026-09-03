@@ -1,4 +1,4 @@
-import { readFileSync, statSync } from 'node:fs';
+import { accessSync, constants, readFileSync, statSync } from 'node:fs';
 import type { EnglishPilotConfig } from './types.js';
 
 export interface AssistantNoteDomainReference {
@@ -73,7 +73,9 @@ export function loadAssistantNoteDomainReference(input: {
 
 function isReferenceFile(path: string): boolean {
   try {
-    return statSync(path).isFile();
+    if (!statSync(path).isFile()) return false;
+    accessSync(path, constants.R_OK);
+    return true;
   } catch {
     return false;
   }
