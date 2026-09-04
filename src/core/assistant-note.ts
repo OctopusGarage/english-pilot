@@ -20,7 +20,7 @@ export function extractLastAssistantEnglishNote(text: string): AssistantEnglishN
 
 function parseCompactEnglishNote(note: string): AssistantEnglishNote | undefined {
   const match = note.match(
-    /English note:\s*["“]?([\s\S]*?)["”]?\s*(?:->|→)\s*["“]?([\s\S]*?)(?=\n\s*Why\s*:|\n\s*IPA\s*:|$)/i,
+    /English note:\s*["“]?([\s\S]*?)["”]?\s*(?:->|→)\s*["“]?([\s\S]*?)(?=(?:\n|;)\s*(?:Why|IPA)\s*:|$)/i,
   );
   if (!match) return undefined;
 
@@ -105,7 +105,7 @@ function extractSection(note: string, label: (typeof SECTION_LABELS)[number]): s
     .map(escapeRegExp)
     .join('|');
   const pattern = new RegExp(
-    `(?:^|\\n)\\s*${escapeRegExp(label)}\\s*:\\s*([\\s\\S]*?)(?=\\n\\s*(?:${stopLabels})\\s*:|$)`,
+    `(?:^|[\\n;])\\s*${escapeRegExp(label)}\\s*:\\s*([\\s\\S]*?)(?=(?:\\n|;)\\s*(?:${stopLabels})\\s*:|$)`,
     'i',
   );
   const match = note.match(pattern);

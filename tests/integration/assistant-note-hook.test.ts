@@ -53,6 +53,27 @@ describe('assistant Stop hook learning notes', () => {
     ]);
   });
 
+  it('records inline compact English notes from Stop hook payloads', () => {
+    const result = runCli(
+      ['hook', 'codex', '--stdin'],
+      JSON.stringify({
+        hook_event_name: 'Stop',
+        last_assistant_message:
+          'English note: "fix this problem" -> "fix this issue"; Why: In engineering contexts, issue is more natural for bugs.; IPA: issue /ˈɪʃuː/',
+      }),
+    );
+
+    expect(result).toEqual({ exitCode: 0, stdout: '', stderr: '' });
+    expect(listLearningItems()).toEqual([
+      expect.objectContaining({
+        original: 'fix this problem',
+        suggested: 'fix this issue',
+        pattern: 'In engineering contexts, issue is more natural for bugs.',
+        ipa: [{ word: 'issue', ipa: '/ˈɪʃuː/' }],
+      }),
+    ]);
+  });
+
   it('records rich English notes from Stop hook payloads', () => {
     const result = runCli(
       ['hook', 'codex', '--stdin'],
