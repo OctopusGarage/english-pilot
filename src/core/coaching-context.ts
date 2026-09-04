@@ -1,5 +1,6 @@
 import type { EnglishPilotConfig } from './types.js';
 import type { PromptEvent } from '../storage/repository.js';
+import { buildAssistantEnglishNoteFormatGuidance } from './assistant-note-format.js';
 import {
   buildAssistantNoteDomainGuidance,
   loadAssistantNoteDomainReference,
@@ -18,6 +19,7 @@ export interface CoachingContext {
     intensity: EnglishPilotConfig['coachingIntensity'];
     cooldownMinutes: number;
     maxInlineCoachingPerDay: number;
+    assistantEnglishNoteDepth: EnglishPilotConfig['assistantEnglishNoteDepth'];
   };
   today: {
     date: string;
@@ -55,6 +57,7 @@ export function buildCoachingContext(input: {
     paths: input.config.assistantEnglishNoteReferencePaths,
   });
   const domainGuidance = buildAssistantNoteDomainGuidance(domainReference);
+  const noteFormatGuidance = buildAssistantEnglishNoteFormatGuidance(input.config.assistantEnglishNoteDepth);
   const reason = decideInlineCoaching({
     intensity: input.config.coachingIntensity,
     remaining,
@@ -77,7 +80,7 @@ export function buildCoachingContext(input: {
       forceMode
         ? 'For the latest allowed user prompt, append one concise note if it contains any Chinese fragment, awkward English, or obvious phrasing improvement:'
         : 'If the latest allowed user prompt contains Chinese or awkward English, append one concise note:',
-      'English note: "original phrase" -> "more natural English"; Why: one practical rule; IPA: key word /IPA/ when useful.',
+      noteFormatGuidance,
       domainGuidance,
     ].join(' '),
     domainReference,
@@ -92,6 +95,7 @@ export function buildCoachingContext(input: {
       intensity: input.config.coachingIntensity,
       cooldownMinutes: input.config.coachingCooldownMinutes,
       maxInlineCoachingPerDay: input.config.maxInlineCoachingPerDay,
+      assistantEnglishNoteDepth: input.config.assistantEnglishNoteDepth,
     },
     today: {
       date: today,
