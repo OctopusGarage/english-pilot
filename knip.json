@@ -2,6 +2,14 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": [],
   "project": ["src/**/*.ts", "tests/**/*.ts"],
+  "ignoreDependencies": [
+    "@stryker-mutator/core",
+    "dependency-cruiser",
+    "eslint",
+    "husky",
+    "lint-staged",
+    "prettier"
+  ],
   "ignoreExportsUsedInFile": true,
   "rules": {
     "binaries": "off",
