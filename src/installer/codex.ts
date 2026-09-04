@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { buildAssistantEnglishNoteFormatGuidance } from '../core/assistant-note-format.js';
 
 export interface CodexInstallPlan {
   hooksConfigPath: string;
@@ -218,13 +219,15 @@ function codexGuidanceBlock(): string {
     '## EnglishPilot',
     '',
     'Do not derail the main task. When the user prompt is allowed, complete the requested work first.',
-    'If the prompt contains any Chinese fragment, awkward English, or an obvious everyday phrasing improvement, append one compact teaching note at the end of the final response.',
+    'If the prompt contains any Chinese fragment, awkward English, or an obvious everyday phrasing improvement, add one English note at the end of the final response when allowed and teachable.',
     'In force/high intensity, treat this as required unless there is genuinely no useful improvement.',
     '',
-    'English note: "original phrase" -> "more natural English"; Why: one practical rule; IPA: key word /IPA/ when useful.',
+    'When the english-pilot MCP server is available, use `english_coaching_context` to get the configured note depth and response guidance before writing the final answer.',
+    'Use `english_rewrite_text` and `english_pronounce_text` for structured help when useful.',
     '',
-    'Keep it elegant and professional: 1-3 short lines, practical workplace English, no lecture, no interruption before the main answer.',
-    'When the english-pilot MCP server is available, use `english_coaching_context`, `english_rewrite_text`, and `english_pronounce_text` for structured help.',
+    'If MCP is unavailable, prefer this fallback format:',
+    buildAssistantEnglishNoteFormatGuidance('rich'),
+    '',
     'When the user asks for a recap, lesson, speech, or review based on their history, use `english_learning_brief`, `english_input_history`, or `english_notes_history` before answering.',
     'Do not add an English note for prompts blocked by the EnglishPilot hook.',
     CODEX_GUIDANCE_BLOCK_END,

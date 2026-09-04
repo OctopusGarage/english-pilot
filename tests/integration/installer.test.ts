@@ -306,8 +306,14 @@ describe('Codex installer commands', () => {
     expect(readFileSync(configPath, 'utf8')).toContain('[mcp_servers.english-pilot]');
     expect(readFileSync(configPath, 'utf8')).toContain('[hooks]\nenabled = true');
     expect(readFileSync(configPath, 'utf8')).toContain('serve');
-    expect(readFileSync(agentsPath, 'utf8')).toContain('English note:');
-    expect(readFileSync(agentsPath, 'utf8')).toContain('Do not derail the main task');
+    const agentsGuidance = readFileSync(agentsPath, 'utf8');
+    expect(agentsGuidance).toContain('Do not derail the main task');
+    expect(agentsGuidance).toContain('english_coaching_context');
+    expect(agentsGuidance).toContain('Rich English Note');
+    expect(agentsGuidance).toContain('Original:');
+    expect(agentsGuidance).toContain('Better:');
+    expect(agentsGuidance).not.toContain('one compact teaching note');
+    expect(agentsGuidance).not.toContain('1-3 short lines');
   });
 
   it('enables Codex hooks when an existing config has hooks disabled', () => {
