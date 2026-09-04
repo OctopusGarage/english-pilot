@@ -27,7 +27,7 @@ export function buildAssistantEnglishNoteFormatGuidance(depth: AssistantEnglishN
 
     case 'rich':
       return [
-        'Use a Rich English Note by default: 5-8 useful lines, compact enough for a final response but rich enough for study.',
+        'Use a Rich English Note by default: 5-8 useful lines, brief enough for a final response but rich enough for study.',
         'Use this shape:',
         'English note:',
         'Original: "fix this problem"',

@@ -71,22 +71,22 @@ export function buildCoachingContext(input: {
         ? 'Coach mode is enabled: do not treat over-threshold language as a blocker; continue the main task and add one useful English note when the prompt is teachable.'
         : 'Enforce mode is enabled: over-threshold prompts are handled by the submit hook before the agent turn.',
       forceMode
-        ? 'Force mode is enabled: append one concise English note whenever the prompt has Chinese fragments, non-native phrasing, or a clearly better everyday expression.'
+        ? 'Force mode is enabled: append one English note using the configured note depth whenever the prompt has Chinese fragments, non-native phrasing, or a clearly better everyday expression.'
         : 'When useful, add at most one short English note.',
       'Prefer practical workplace English, brief teaching rationale, and reusable expressions.',
     ].join(' '),
     finalResponseInstruction: [
       'Finish the main task first.',
       forceMode
-        ? 'For the latest allowed user prompt, append one concise note if it contains any Chinese fragment, awkward English, or obvious phrasing improvement:'
-        : 'If the latest allowed user prompt contains Chinese or awkward English, append one concise note:',
+        ? 'For the latest allowed user prompt, append one English note using the configured note depth if it contains any Chinese fragment, awkward English, or obvious phrasing improvement:'
+        : 'If the latest allowed user prompt contains Chinese or awkward English, append one English note using the configured note depth:',
       noteFormatGuidance,
       domainGuidance,
     ].join(' '),
     domainReference,
     cadence: [
       forceMode
-        ? 'Force mode bypasses cooldown and daily-cap intent for teachable user prompts; keep the note compact and professional.'
+        ? 'Force mode bypasses cooldown and daily-cap intent for teachable user prompts; follow the configured note depth and keep the note professional.'
         : 'Respect the configured coaching intensity, cooldown, and daily cap.',
       'Skip only when there is no meaningful wording improvement.',
     ].join(' '),

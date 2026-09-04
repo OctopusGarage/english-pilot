@@ -103,6 +103,9 @@ describe('inline coaching policy', () => {
     expect(context.finalResponseInstruction).toContain('Rich English Note');
     expect(context.finalResponseInstruction).toContain('Useful patterns:');
     expect(context.finalResponseInstruction).toContain('Collocations: startup issue');
+    expect(context.finalResponseInstruction).not.toContain('one concise note');
+    expect(context.finalResponseInstruction).not.toContain('compact');
+    expect(context.cadence).not.toContain('keep the note compact');
     expect(context.policy.assistantEnglishNoteDepth).toBe('rich');
   });
 
