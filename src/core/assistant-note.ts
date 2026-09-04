@@ -14,7 +14,7 @@ export function extractLastAssistantEnglishNote(text: string): AssistantEnglishN
   if (marker < 0) return undefined;
 
   const note = text.slice(marker);
-  if (hasRichOriginalLabel(note)) return parseRichEnglishNote(note);
+  if (hasRichShapedLabel(note)) return parseRichEnglishNote(note);
   return parseRichEnglishNote(note) ?? parseCompactEnglishNote(note);
 }
 
@@ -58,10 +58,6 @@ function parseRichEnglishNote(note: string): AssistantEnglishNote | undefined {
   };
 }
 
-function hasRichOriginalLabel(note: string): boolean {
-  return /(?:^|\n)\s*Original\s*:/i.test(note);
-}
-
 export function buildAssistantEnglishNoteLearningItem(
   source: AssistantEnglishNoteSource,
   note: AssistantEnglishNote,
@@ -99,6 +95,13 @@ const SECTION_LABELS = [
   'Practice sentence',
   'IPA',
 ] as const;
+
+const RICH_SHAPED_LABELS = SECTION_LABELS.filter((label) => label !== 'Why' && label !== 'IPA');
+
+function hasRichShapedLabel(note: string): boolean {
+  const labels = RICH_SHAPED_LABELS.map(escapeRegExp).join('|');
+  return new RegExp(`(?:^|\\n)\\s*(?:${labels})\\s*:`, 'i').test(note);
+}
 
 function extractSection(note: string, label: (typeof SECTION_LABELS)[number]): string | undefined {
   const stopLabels = SECTION_LABELS.filter((candidate) => candidate !== label)
