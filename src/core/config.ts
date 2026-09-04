@@ -273,6 +273,9 @@ function parseStringConfigValue<K extends keyof EnglishPilotConfig>(key: K, valu
   if (key === 'assistantEnglishNoteStyle') {
     return parseOneOf(key, value, ['general', 'software-engineering']) as EnglishPilotConfig[K];
   }
+  if (key === 'assistantEnglishNoteDepth') {
+    return parseOneOf(key, value, ['compact', 'rich', 'lesson']) as EnglishPilotConfig[K];
+  }
   if (key === 'storage') return parseOneOf(key, value, ['sqlite', 'jsonl']) as EnglishPilotConfig[K];
   if (key === 'rewriteBackend') return parseOneOf(key, value, ['off', 'argos']) as EnglishPilotConfig[K];
   if (key === 'externalAgentBackend')
@@ -306,6 +309,7 @@ function validateConfig(config: EnglishPilotConfig): EnglishPilotConfig {
     'danger-full-access',
   ]);
   validateOneOf('assistantEnglishNoteStyle', config.assistantEnglishNoteStyle, ['general', 'software-engineering']);
+  validateOneOf('assistantEnglishNoteDepth', config.assistantEnglishNoteDepth, ['compact', 'rich', 'lesson']);
   validateBoolean('preferEnglishLeading', config.preferEnglishLeading);
   validateBoolean('ignoreCodePathsUrls', config.ignoreCodePathsUrls);
   validateBoolean('blockWithRewrite', config.blockWithRewrite);

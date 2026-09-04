@@ -25,6 +25,7 @@ export const defaultConfig: EnglishPilotConfig = {
   externalAgentCodexBinary: 'codex',
   externalAgentCodexSandbox: 'workspace-write',
   assistantEnglishNoteStyle: 'software-engineering',
+  assistantEnglishNoteDepth: 'rich',
   assistantEnglishNoteReferencePaths: [],
   disabledProjectPaths: [],
 };

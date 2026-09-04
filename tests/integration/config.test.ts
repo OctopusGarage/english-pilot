@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runCli } from '../../src/adapters/cli.js';
+import { setConfigValue } from '../../src/core/config.js';
 
 describe('config commands', () => {
   let previousHome: string | undefined;
@@ -44,6 +45,7 @@ describe('config commands', () => {
       externalAgentBackend: 'off',
       externalAgentCodexSandbox: 'workspace-write',
       assistantEnglishNoteStyle: 'software-engineering',
+      assistantEnglishNoteDepth: 'rich',
       assistantEnglishNoteReferencePaths: [],
     });
   });
@@ -123,6 +125,18 @@ describe('config commands', () => {
       '/tmp/json-terms.txt',
       '/tmp/json-systems.md',
     ]);
+  });
+
+  it('sets assistant English note depth', () => {
+    expect(setConfigValue('assistantEnglishNoteDepth', 'compact').assistantEnglishNoteDepth).toBe('compact');
+    expect(setConfigValue('assistantEnglishNoteDepth', 'rich').assistantEnglishNoteDepth).toBe('rich');
+    expect(setConfigValue('assistantEnglishNoteDepth', 'lesson').assistantEnglishNoteDepth).toBe('lesson');
+  });
+
+  it('rejects invalid assistant English note depth', () => {
+    expect(() => setConfigValue('assistantEnglishNoteDepth', 'deep')).toThrow(
+      'assistantEnglishNoteDepth must be one of: compact, rich, lesson.',
+    );
   });
 
   it('rejects ratio config values outside their valid range', () => {
