@@ -28,6 +28,10 @@ describe('suggestRewrite', () => {
     expect(suggestRewrite('访问不了：  http://localhost:60806')).toBe('I cannot access http://localhost:60806.');
   });
 
+  it('rewrites Chinese git workflow commands with software-engineering vocabulary', () => {
+    expect(suggestRewrite('提交推送')).toBe('Commit and push the changes.');
+  });
+
   it('uses a configured local Argos-compatible translator before the generic fallback', () => {
     const fakePython = join(home, 'fake-python');
     writeFileSync(fakePython, '#!/bin/sh\ncat >/dev/null\nprintf "I cannot open the local page"\n', 'utf8');

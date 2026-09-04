@@ -52,6 +52,10 @@ function suggestPatternRewrite(original: string): string | undefined {
     return 'I want to create a new project to help me learn and use English during my normal AI conversations.';
   }
 
+  if (/提交\s*(并|和|然后)?\s*推送/.test(normalized)) {
+    return 'Commit and push the changes.';
+  }
+
   if (/设计|优化/.test(original)) {
     return 'Let us think through how to design and refine this.';
   }
