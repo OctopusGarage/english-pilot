@@ -100,7 +100,10 @@ const RICH_SHAPED_LABELS = SECTION_LABELS.filter((label) => label !== 'Why' && l
 
 function hasRichShapedLabel(note: string): boolean {
   const labels = RICH_SHAPED_LABELS.map(escapeRegExp).join('|');
-  return new RegExp(`(?:^|\\n)\\s*(?:${labels})\\s*:`, 'i').test(note);
+  return new RegExp(
+    `(?:^|[\\n;])\\s*(?:${labels})\\s*:|(?:^|\\n)\\s*(?:\\*\\*)?English note(?:\\*\\*)?\\s*:\\s*(?:${labels})\\s*:`,
+    'i',
+  ).test(note);
 }
 
 function extractSection(note: string, label: (typeof SECTION_LABELS)[number]): string | undefined {

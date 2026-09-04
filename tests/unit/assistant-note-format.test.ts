@@ -14,6 +14,7 @@ describe('buildAssistantEnglishNoteFormatGuidance', () => {
     const guidance = buildAssistantEnglishNoteFormatGuidance('rich');
 
     expect(guidance).toContain('Rich English Note');
+    expect(guidance).toContain('English note:\nOriginal:');
     expect(guidance).toContain('Original: "fix this problem"');
     expect(guidance).toContain('Better: "fix this issue" / "resolve this startup issue"');
     expect(guidance).toContain('Useful patterns:');
@@ -25,6 +26,7 @@ describe('buildAssistantEnglishNoteFormatGuidance', () => {
     const guidance = buildAssistantEnglishNoteFormatGuidance('lesson');
 
     expect(guidance).toContain('Mini lesson');
+    expect(guidance).toContain('English note:\nOriginal:');
     expect(guidance).toContain('Original:');
     expect(guidance).toContain('Practice sentence:');
   });

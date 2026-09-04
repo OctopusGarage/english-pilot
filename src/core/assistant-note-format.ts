@@ -23,7 +23,7 @@ export function buildAssistantEnglishNoteFormatGuidance(depth: AssistantEnglishN
         'Common mistake: contrast the user phrase with the professional version.',
         'Practice sentence: give one copyable sentence the user can reuse.',
         'IPA: include 1-2 useful words when pronunciation helps.',
-      ].join(' ');
+      ].join('\n');
 
     case 'rich':
       return [
@@ -39,7 +39,7 @@ export function buildAssistantEnglishNoteFormatGuidance(depth: AssistantEnglishN
         'Collocations: startup issue, handshake failure, config mismatch, reproduce the issue, verify the fix',
         'Common mistake: Use "problem" for general trouble; use "issue" for bugs, tickets, incidents, and engineering discussions.',
         'IPA: issue /ˈɪʃuː/ or /ˈɪsjuː/',
-      ].join(' ');
+      ].join('\n');
 
     default: {
       const exhaustiveDepth: never = depth;
