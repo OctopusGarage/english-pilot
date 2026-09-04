@@ -53,6 +53,58 @@ describe('assistant Stop hook learning notes', () => {
     ]);
   });
 
+  it('records rich English notes from Stop hook payloads', () => {
+    const result = runCli(
+      ['hook', 'codex', '--stdin'],
+      JSON.stringify({
+        hook_event_name: 'Stop',
+        last_assistant_message: [
+          'Done.',
+          '',
+          'English note:',
+          'Original: "fix this problem"',
+          'Better: "fix this issue" / "resolve this startup issue"',
+          'Why: In engineering conversations, "issue" is more precise for bugs, failures, tickets, or startup errors.',
+          'Useful patterns:',
+          '- "The MCP client failed during the startup handshake."',
+          '- "This issue belongs at the config boundary."',
+          'Collocations: startup issue, handshake failure, config mismatch, reproduce the issue, verify the fix',
+          'Common mistake: Use "problem" for general trouble; use "issue" for bugs and incidents.',
+          'IPA: issue /ˈɪʃuː/',
+        ].join('\n'),
+      }),
+    );
+
+    expect(result).toEqual({ exitCode: 0, stdout: '', stderr: '' });
+    const items = listLearningItems();
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      original: 'fix this problem',
+      suggested: 'fix this issue / resolve this startup issue',
+      pattern: 'In engineering conversations, "issue" is more precise for bugs, failures, tickets, or startup errors.',
+    });
+    expect(items[0]?.ipa).toEqual([{ word: 'issue', ipa: '/ˈɪʃuː/' }]);
+  });
+
+  it('ignores malformed rich English notes without a Better section', () => {
+    const result = runCli(
+      ['hook', 'codex', '--stdin'],
+      JSON.stringify({
+        hook_event_name: 'Stop',
+        last_assistant_message: [
+          'Done.',
+          '',
+          'English note:',
+          'Original: "fix this problem"',
+          'Why: Missing Better.',
+        ].join('\n'),
+      }),
+    );
+
+    expect(result).toEqual({ exitCode: 0, stdout: '', stderr: '' });
+    expect(listLearningItems()).toHaveLength(0);
+  });
+
   it('ignores Stop hook payloads without a parseable English note', () => {
     const result = runCli(
       ['hook', 'codex', '--stdin'],

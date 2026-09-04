@@ -14,6 +14,10 @@ export function extractLastAssistantEnglishNote(text: string): AssistantEnglishN
   if (marker < 0) return undefined;
 
   const note = text.slice(marker);
+  return parseRichEnglishNote(note) ?? parseCompactEnglishNote(note);
+}
+
+function parseCompactEnglishNote(note: string): AssistantEnglishNote | undefined {
   const match = note.match(
     /English note:\s*["“]?([\s\S]*?)["”]?\s*(?:->|→)\s*["“]?([\s\S]*?)(?=\n\s*Why\s*:|\n\s*IPA\s*:|$)/i,
   );
@@ -24,8 +28,26 @@ export function extractLastAssistantEnglishNote(text: string): AssistantEnglishN
   if (!original || !suggested || normalizeForComparison(original) === normalizeForComparison(suggested))
     return undefined;
 
-  const why = extractLineSection(note, 'Why');
-  const ipa = parseIpaLine(extractLineSection(note, 'IPA'));
+  const why = extractSection(note, 'Why');
+  const ipa = parseIpaLine(extractSection(note, 'IPA'));
+
+  return {
+    original,
+    suggested,
+    ...(why ? { why: normalizeNoteText(why) } : {}),
+    ...(ipa.length > 0 ? { ipa } : {}),
+  };
+}
+
+function parseRichEnglishNote(note: string): AssistantEnglishNote | undefined {
+  const original = normalizeNoteText(extractSection(note, 'Original') ?? '');
+  const suggested = normalizeRichSuggested(extractSection(note, 'Better') ?? '');
+
+  if (!original || !suggested || normalizeForComparison(original) === normalizeForComparison(suggested))
+    return undefined;
+
+  const why = extractSection(note, 'Why');
+  const ipa = parseIpaLine(extractSection(note, 'IPA'));
 
   return {
     original,
@@ -62,11 +84,25 @@ function findLastEnglishNoteMarker(text: string): number {
   return matches[matches.length - 1]?.index ?? -1;
 }
 
-function extractLineSection(note: string, label: 'Why' | 'IPA'): string | undefined {
-  const nextLabel = label === 'Why' ? 'IPA' : undefined;
-  const pattern = nextLabel
-    ? new RegExp(`\\n\\s*${label}\\s*:\\s*([\\s\\S]*?)(?=\\n\\s*${nextLabel}\\s*:|$)`, 'i')
-    : new RegExp(`\\n\\s*${label}\\s*:\\s*([^\\n]*)`, 'i');
+const SECTION_LABELS = [
+  'Original',
+  'Better',
+  'Why',
+  'Useful patterns',
+  'Collocations',
+  'Common mistake',
+  'Practice sentence',
+  'IPA',
+] as const;
+
+function extractSection(note: string, label: (typeof SECTION_LABELS)[number]): string | undefined {
+  const stopLabels = SECTION_LABELS.filter((candidate) => candidate !== label)
+    .map(escapeRegExp)
+    .join('|');
+  const pattern = new RegExp(
+    `(?:^|\\n)\\s*${escapeRegExp(label)}\\s*:\\s*([\\s\\S]*?)(?=\\n\\s*(?:${stopLabels})\\s*:|$)`,
+    'i',
+  );
   const match = note.match(pattern);
   return match?.[1];
 }
@@ -90,9 +126,17 @@ function normalizeNoteText(text: string): string {
     .trim();
 }
 
+function normalizeRichSuggested(text: string): string {
+  return normalizeNoteText(text).replace(/"\s*\/\s*"/g, ' / ');
+}
+
 function normalizeForComparison(text: string): string {
   return text
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
