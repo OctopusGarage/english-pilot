@@ -26,7 +26,12 @@ function parseCompactEnglishNote(note: string): AssistantEnglishNote | undefined
 
   const original = normalizeNoteText(match[1] ?? '');
   const suggested = normalizeNoteText(match[2] ?? '');
-  if (!original || !suggested || normalizeForComparison(original) === normalizeForComparison(suggested))
+  if (
+    !original ||
+    !suggested ||
+    startsWithSectionLabel(original) ||
+    normalizeForComparison(original) === normalizeForComparison(suggested)
+  )
     return undefined;
 
   const why = extractSection(note, 'Why');
@@ -104,6 +109,11 @@ function hasRichShapedLabel(note: string): boolean {
     `(?:^|[\\n;])\\s*(?:${labels})\\s*:|(?:^|\\n)\\s*(?:\\*\\*)?English note(?:\\*\\*)?\\s*:\\s*(?:${labels})\\s*:`,
     'i',
   ).test(note);
+}
+
+function startsWithSectionLabel(text: string): boolean {
+  const labels = SECTION_LABELS.map(escapeRegExp).join('|');
+  return new RegExp(`^(?:${labels})\\s*:`, 'i').test(text);
 }
 
 function extractSection(note: string, label: (typeof SECTION_LABELS)[number]): string | undefined {
