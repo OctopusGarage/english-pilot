@@ -105,6 +105,23 @@ describe('assistant Stop hook learning notes', () => {
     expect(listLearningItems()).toHaveLength(0);
   });
 
+  it('ignores malformed rich English notes with an arrow in the Why section', () => {
+    const result = runCli(
+      ['hook', 'codex', '--stdin'],
+      JSON.stringify({
+        hook_event_name: 'Stop',
+        last_assistant_message: [
+          'English note:',
+          'Original: "fix this problem"',
+          'Why: use "issue" -> "startup issue"',
+        ].join('\n'),
+      }),
+    );
+
+    expect(result).toEqual({ exitCode: 0, stdout: '', stderr: '' });
+    expect(listLearningItems()).toHaveLength(0);
+  });
+
   it('ignores Stop hook payloads without a parseable English note', () => {
     const result = runCli(
       ['hook', 'codex', '--stdin'],

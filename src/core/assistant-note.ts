@@ -14,6 +14,7 @@ export function extractLastAssistantEnglishNote(text: string): AssistantEnglishN
   if (marker < 0) return undefined;
 
   const note = text.slice(marker);
+  if (hasRichOriginalLabel(note)) return parseRichEnglishNote(note);
   return parseRichEnglishNote(note) ?? parseCompactEnglishNote(note);
 }
 
@@ -55,6 +56,10 @@ function parseRichEnglishNote(note: string): AssistantEnglishNote | undefined {
     ...(why ? { why: normalizeNoteText(why) } : {}),
     ...(ipa.length > 0 ? { ipa } : {}),
   };
+}
+
+function hasRichOriginalLabel(note: string): boolean {
+  return /(?:^|\n)\s*Original\s*:/i.test(note);
 }
 
 export function buildAssistantEnglishNoteLearningItem(
