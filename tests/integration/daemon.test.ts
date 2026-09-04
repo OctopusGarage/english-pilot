@@ -746,6 +746,48 @@ describe('daemon runtime infrastructure', () => {
     expect(plist).not.toContain(`${home}/.english-pilot`);
   });
 
+  it('installs a launchd schedule for Feishu daily review delivery', () => {
+    const fakeBin = join(home, 'fake-feishu-schedule-bin');
+    const runtimeHome = join(home, 'custom-runtime-home');
+    mkdirSync(fakeBin, { recursive: true });
+    writeExecutable(join(fakeBin, 'launchctl'), ['#!/bin/sh', 'exit 0', ''].join('\n'));
+    writeExecutable(
+      join(fakeBin, 'id'),
+      ['#!/bin/sh', 'if [ "$1" = "-u" ]; then echo 501; else /usr/bin/id "$@"; fi', ''].join('\n'),
+    );
+
+    const result = spawnSync('sh', ['scripts/install-feishu-daily-review-launchd.sh'], {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        HOME: home,
+        ENGLISH_PILOT_HOME: runtimeHome,
+        PATH: `${fakeBin}:${process.env.PATH ?? ''}`,
+      },
+    });
+
+    expect(result).toMatchObject({ status: 0 });
+    const plist = readFileSync(
+      join(home, 'Library', 'LaunchAgents', 'com.octopusgarage.english-pilot.feishu-daily-review.plist'),
+      'utf8',
+    );
+    expect(plist).toContain('<string>com.octopusgarage.english-pilot.feishu-daily-review</string>');
+    expect(plist).toContain(
+      '<string>__PROJECT_DIR__/scripts/feishu-daily-review-launchd-wrapper.sh</string>'.replace(
+        '__PROJECT_DIR__',
+        process.cwd(),
+      ),
+    );
+    expect(plist).toContain(`<string>${runtimeHome}</string>`);
+    expect(plist).toContain(`<string>${join(runtimeHome, 'logs', 'feishu-daily-review-launchd.out.log')}</string>`);
+    expect(plist).toContain('<key>Hour</key>');
+    expect(plist).toContain('<integer>8</integer>');
+    expect(plist).toContain('<key>Minute</key>');
+    expect(plist).toContain('<integer>0</integer>');
+    expect(plist).not.toContain('<key>KeepAlive</key>');
+  });
+
   it('uses ENGLISH_PILOT_HOME in generated systemd runtime paths', () => {
     const fakeBin = join(home, 'fake-systemd-bin');
     const runtimeHome = join(home, 'custom-runtime-home');

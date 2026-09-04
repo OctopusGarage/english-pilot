@@ -10,6 +10,7 @@ import {
 } from '../integrations/daily-review-delivery.js';
 import { deliverObsidianDailyReview, formatDailyReviewDelivery } from '../integrations/deliver.js';
 import { formatDailyReviewDryRun } from '../integrations/dry-run.js';
+import { deliverFeishuDailyReview } from '../integrations/feishu-daily-review-delivery.js';
 import { buildIntegrationAccountGuide, formatIntegrationAccountGuide } from '../integrations/account-guide.js';
 import { formatIntegrationAccountValidation } from '../integrations/account-validation.js';
 import {
@@ -292,7 +293,7 @@ export function runIntegrations(args: string[]): CliResult {
       '  english-pilot integrations message-coaching --target <target> --text "..." [--record] [--json]',
       '  english-pilot integrations event-coaching --target wechat --event-json <json> [--record] [--json]',
       '  english-pilot integrations deliver --target obsidian [--date YYYY-MM-DD] [--dir <path>] [--write] [--json]',
-      '  english-pilot integrations deliver --target wechat [--date YYYY-MM-DD] [--json]',
+      '  english-pilot integrations deliver --target feishu|wechat [--date YYYY-MM-DD] [--json]',
       '',
     ].join('\n'),
   };
@@ -388,11 +389,26 @@ export async function runIntegrationSend(args: string[], options: CliAsyncOption
   }
 }
 
-export async function runIntegrationDeliver(args: string[]): Promise<CliResult> {
+export async function runIntegrationDeliver(args: string[], options: CliAsyncOptions = {}): Promise<CliResult> {
   const target = findIntegrationTarget(getFlagValue(args, '--target'));
   const date = getFlagValue(args, '--date') ?? new Date().toISOString().slice(0, 10);
-  if (!target || target.id !== 'wechat' || !isDateKey(date)) {
-    return usage('english-pilot integrations deliver --target wechat [--date YYYY-MM-DD] [--json]');
+  if (!target || !['wechat', 'feishu'].includes(target.id) || !isDateKey(date)) {
+    return usage('english-pilot integrations deliver --target feishu|wechat [--date YYYY-MM-DD] [--json]');
+  }
+
+  if (target.id === 'feishu') {
+    const result = await deliverFeishuDailyReview({
+      date,
+      items: listLearningItems(),
+      env: options.env,
+    });
+    return {
+      exitCode: result.delivered ? 0 : 1,
+      stdout: args.includes('--json')
+        ? `${JSON.stringify(result, null, 2)}\n`
+        : formatFeishuDailyReviewDelivery(result),
+      stderr: '',
+    };
   }
 
   const payload = buildDailyReviewDeliveryPayload({ target, date, items: listLearningItems() });
@@ -421,6 +437,20 @@ export async function runIntegrationDeliver(args: string[]): Promise<CliResult> 
       stderr: '',
     };
   }
+}
+
+function formatFeishuDailyReviewDelivery(result: Awaited<ReturnType<typeof deliverFeishuDailyReview>>): string {
+  return [
+    'Feishu daily review delivery',
+    `Delivered: ${result.delivered ? 'yes' : 'no'}`,
+    `Network: ${result.network ? 'yes, through tmux-claude-bot notify' : 'no'}`,
+    `Messages: ${result.messagesSent}/${result.messageCount}`,
+    `Session: ${result.session}`,
+    `Preview: ${result.messagePreview}`,
+    ...(result.blocker ? [`Blocker: ${result.blocker}`] : []),
+    ...(result.errors?.length ? ['Errors:', ...result.errors.map((error) => `- ${error}`)] : []),
+    '',
+  ].join('\n');
 }
 
 function formatWeChatDaemonDelivery(result: WeChatDailyReviewDaemonDeliveryResult): string {

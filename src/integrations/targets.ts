@@ -19,7 +19,14 @@ export const integrationTargets: IntegrationTarget[] = [
     id: 'feishu',
     label: 'Feishu/Lark',
     status: 'supported',
-    capabilities: ['long-connection', 'qr-onboarding', 'message-coaching', 'reply-coaching', 'review-items'],
+    capabilities: [
+      'long-connection',
+      'qr-onboarding',
+      'message-coaching',
+      'reply-coaching',
+      'review-items',
+      'daily-review-delivery',
+    ],
   },
   {
     id: 'wechat',

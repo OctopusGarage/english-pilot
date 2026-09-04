@@ -287,7 +287,17 @@ AI-agent eval, GitHub Actions, and Claude Code commands is documented in
 
 `integrations deliver --target obsidian --dir <path>` remains available as a deferred local helper. It previews the daily review delivery path and payload without writing files. Add `--write` to write the daily review pack for a date to `<path>/YYYY-MM-DD.md`. This stays offline, returns `wouldSend: false`, and never sends network messages.
 
+`integrations deliver --target feishu [--date YYYY-MM-DD]` sends a compact daily review through the local `tmux-claude-bot` Feishu/Lark notifier. It filters noisy review items, selects up to 12 due items, splits content into messages capped at about 1,000 characters, and appends `[truncated; see the linked report/logs for full details]` when the chat payload is capped. It uses the project-bound `english-pilot` tmux session by default; set `ENGLISH_PILOT_FEISHU_SESSION` to override the session used for Feishu group routing.
+
 `integrations deliver --target wechat [--date YYYY-MM-DD]` sends the prepared daily review payload through the already-running daemon's WeChat long connection. It does not autostart the daemon and does not use the deprecated direct sender. If the daemon socket is unavailable, the WeChat channel is not running, or no QR-login account/allowed user is ready, it returns a structured blocker.
+
+On macOS, install a daily 08:00 Feishu daily-review schedule after `tmux-claude-bot` is installed and running with Feishu/Lark configured:
+
+```bash
+npm run schedule:feishu-daily-review:install
+```
+
+The schedule registers `com.octopusgarage.english-pilot.feishu-daily-review` as a user launchd job. It runs `english-pilot integrations deliver --target feishu --json`, reads background environment values from `~/.english-pilot/.env`, routes through `tcb notify --channel lark`, and writes launchd output to `~/.english-pilot/logs/feishu-daily-review-launchd.out.log` and `~/.english-pilot/logs/feishu-daily-review-launchd.err.log`.
 
 `doctor` includes Feishu/Lark and WeChat long-connection preflight, voice provider preflight summaries, and recorded cloud STT provider assessment history. Add `--write --dir <path>` to export the diagnostic report as Markdown. Missing optional integration credentials, voice-provider configuration, or provider sample evidence does not make overall doctor status fail.
 

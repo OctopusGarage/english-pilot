@@ -52,7 +52,9 @@ describe('runCli', () => {
     expect(result.stdout).toContain(
       'english-pilot agent run --text "..." [--backend claude|codex] [--cwd <path>] [--dry-run] [--json]',
     );
-    expect(result.stdout).toContain('english-pilot integrations deliver --target wechat [--date YYYY-MM-DD] [--json]');
+    expect(result.stdout).toContain(
+      'english-pilot integrations deliver --target feishu|wechat [--date YYYY-MM-DD] [--json]',
+    );
     expect(result.stdout).toContain(
       'english-pilot gate disable (--repo-ignore|--global-ignore) [--cwd <path>] [--json]',
     );
@@ -596,7 +598,7 @@ describe('runCli', () => {
           'integrations message-coaching --record',
           'integrations event-coaching',
           'integrations deliver',
-          'integrations deliver --target wechat',
+          'integrations deliver --target feishu|wechat',
           'doctor',
         ]),
         mcp: expect.arrayContaining([
@@ -1243,7 +1245,14 @@ describe('runCli', () => {
           id: 'feishu',
           label: 'Feishu/Lark',
           status: 'supported',
-          capabilities: ['long-connection', 'qr-onboarding', 'message-coaching', 'reply-coaching', 'review-items'],
+          capabilities: [
+            'long-connection',
+            'qr-onboarding',
+            'message-coaching',
+            'reply-coaching',
+            'review-items',
+            'daily-review-delivery',
+          ],
         },
         {
           id: 'wechat',
@@ -1283,7 +1292,14 @@ describe('runCli', () => {
         id: 'feishu',
         label: 'Feishu/Lark',
         status: 'supported',
-        capabilities: ['long-connection', 'qr-onboarding', 'message-coaching', 'reply-coaching', 'review-items'],
+        capabilities: [
+          'long-connection',
+          'qr-onboarding',
+          'message-coaching',
+          'reply-coaching',
+          'review-items',
+          'daily-review-delivery',
+        ],
       },
       policy: 'environment',
       storage: 'process-env',
@@ -1346,8 +1362,8 @@ describe('runCli', () => {
         status: 'supported',
       },
       delivery: {
-        supported: false,
-        mode: 'payload-only',
+        supported: true,
+        mode: 'message',
       },
       pack: {
         date: item.nextReviewAt,
@@ -1383,8 +1399,8 @@ describe('runCli', () => {
       requiresCredentials: ['FEISHU_APP_ID', 'FEISHU_APP_SECRET', 'FEISHU_ALLOWED_OPEN_IDS'],
       payload: {
         delivery: {
-          supported: false,
-          mode: 'payload-only',
+          supported: true,
+          mode: 'message',
         },
         pack: {
           date: item.nextReviewAt,
@@ -1393,6 +1409,70 @@ describe('runCli', () => {
         },
       },
     });
+  });
+
+  it('delivers compact Feishu daily review chunks through tmux-claude-bot notify', async () => {
+    const fakeBin = join(home, 'fake-bin');
+    const argsLog = join(home, 'tcb-args.log');
+    const bodyLog = join(home, 'tcb-body.log');
+    const previousPath = process.env.PATH;
+    mkdirSync(fakeBin, { recursive: true });
+    writeExecutable(
+      join(fakeBin, 'tcb'),
+      [
+        '#!/bin/sh',
+        'printf "%s\\n" "$*" >> "$TCB_ARGS_LOG"',
+        'cat >> "$TCB_BODY_LOG"',
+        'printf "\\n---MESSAGE---\\n" >> "$TCB_BODY_LOG"',
+        'printf \'{"status":"sent","deliveries":[{"channel":"lark","ok":true}]}\\n\'',
+        '',
+      ].join('\n'),
+    );
+    process.env.PATH = `${fakeBin}:${process.env.PATH ?? ''}`;
+
+    try {
+      runCli([
+        'coach',
+        '--text',
+        '这个 threshold 后续支持调整强度, and the workflow should feel sophisticated.',
+        '--record',
+        '--json',
+      ]);
+      const [item] = JSON.parse(runCli(['review', '--json']).stdout);
+      const result = await runCliAsync(
+        ['integrations', 'deliver', '--target', 'feishu', '--date', item.nextReviewAt, '--json'],
+        '',
+        {
+          env: {
+            ...process.env,
+            TCB_ARGS_LOG: argsLog,
+            TCB_BODY_LOG: bodyLog,
+          },
+        },
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toBe('');
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        operation: 'feishu-daily-review-delivery',
+        target: 'feishu',
+        delivered: true,
+        network: true,
+        messagesSent: 1,
+        session: expect.stringContaining('tmux_proj_'),
+      });
+      expect(readFileSync(argsLog, 'utf8')).toContain('notify --channel lark --session');
+      expect(readFileSync(argsLog, 'utf8')).toContain('--source english-pilot');
+      const body = readFileSync(bodyLog, 'utf8');
+      expect(body).toContain('EnglishPilot Daily Review');
+      expect(body).toContain('Due: 1 | Selected: 1');
+      expect(body).toContain('Original:');
+      expect(body).not.toContain('Review prompt');
+      expect(body).not.toContain('Next review');
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+    }
   });
 
   it('builds a channel-neutral message coaching payload for supported message integrations', () => {
@@ -1697,7 +1777,14 @@ describe('runCli', () => {
           id: 'feishu',
           label: 'Feishu/Lark',
           status: 'supported',
-          capabilities: ['long-connection', 'qr-onboarding', 'message-coaching', 'reply-coaching', 'review-items'],
+          capabilities: [
+            'long-connection',
+            'qr-onboarding',
+            'message-coaching',
+            'reply-coaching',
+            'review-items',
+            'daily-review-delivery',
+          ],
         },
         ready: false,
         network: false,
@@ -2675,6 +2762,11 @@ function restoreEnv(values: Record<string, string | undefined>): void {
       process.env[key] = value;
     }
   }
+}
+
+function writeExecutable(path: string, content: string): void {
+  writeFileSync(path, content, 'utf8');
+  chmodSync(path, 0o755);
 }
 
 function jsonResponse(body: unknown) {

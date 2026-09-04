@@ -60,6 +60,7 @@
     "service:status": "node dist/src/bin/english-pilot.js service status",
     "service:restart": "node dist/src/bin/english-pilot.js service restart",
     "service:logs": "node dist/src/bin/english-pilot.js service logs",
+    "schedule:feishu-daily-review:install": "sh scripts/install-feishu-daily-review-launchd.sh",
     "start": "node dist/src/bin/english-pilot.js run",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
