@@ -93,7 +93,7 @@ export async function runCliAsync(argv: string[], stdin = '', options: CliAsyncO
     return runIntegrationSend(args, options);
   }
   if (command === 'integrations' && args[0] === 'deliver') {
-    return runIntegrationDeliver(args);
+    return runIntegrationDeliver(args, options);
   }
   if (command === 'integrations' && args[0] === 'account-validate') {
     return runIntegrationAccountValidate(args, options);

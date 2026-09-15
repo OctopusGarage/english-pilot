@@ -23,7 +23,7 @@ export function buildDailyReviewIntegrationPayload(
   return {
     target,
     delivery: {
-      supported: target.id === 'obsidian' || target.id === 'wechat',
+      supported: target.id === 'obsidian' || target.id === 'feishu' || target.id === 'wechat',
       mode: deliveryModeForTarget(target),
     },
     pack: {
@@ -38,6 +38,6 @@ export function buildDailyReviewIntegrationPayload(
 
 function deliveryModeForTarget(target: IntegrationTarget): 'export' | 'message' | 'payload-only' {
   if (target.id === 'obsidian') return 'export';
-  if (target.id === 'wechat') return 'message';
+  if (target.id === 'feishu' || target.id === 'wechat') return 'message';
   return 'payload-only';
 }

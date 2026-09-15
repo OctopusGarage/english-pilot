@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runCli } from '../../src/adapters/cli.js';
+import { setConfigValue } from '../../src/core/config.js';
 
 describe('config commands', () => {
   let previousHome: string | undefined;
@@ -43,6 +44,9 @@ describe('config commands', () => {
       storage: 'sqlite',
       externalAgentBackend: 'off',
       externalAgentCodexSandbox: 'workspace-write',
+      assistantEnglishNoteStyle: 'software-engineering',
+      assistantEnglishNoteDepth: 'rich',
+      assistantEnglishNoteReferencePaths: [],
     });
   });
 
@@ -98,6 +102,43 @@ describe('config commands', () => {
     expect(JSON.parse(getResult.stdout).disabledProjectPaths).toEqual(['/tmp/a', '/tmp/b']);
   });
 
+  it('persists assistant English note reference path overrides', () => {
+    const setStyle = runCli(['config', 'set', 'assistantEnglishNoteStyle', 'general']);
+    const setPaths = runCli(['config', 'set', 'assistantEnglishNoteReferencePaths', '/tmp/terms.txt,/tmp/systems.md']);
+    const getResult = runCli(['config', 'get']);
+    const setJsonPaths = runCli([
+      'config',
+      'set',
+      'assistantEnglishNoteReferencePaths',
+      '["/tmp/json-terms.txt","/tmp/json-systems.md"]',
+    ]);
+    const getJsonResult = runCli(['config', 'get']);
+
+    expect(setStyle.exitCode).toBe(0);
+    expect(setPaths.exitCode).toBe(0);
+    expect(JSON.parse(getResult.stdout)).toMatchObject({
+      assistantEnglishNoteStyle: 'general',
+      assistantEnglishNoteReferencePaths: ['/tmp/terms.txt', '/tmp/systems.md'],
+    });
+    expect(setJsonPaths.exitCode).toBe(0);
+    expect(JSON.parse(getJsonResult.stdout).assistantEnglishNoteReferencePaths).toEqual([
+      '/tmp/json-terms.txt',
+      '/tmp/json-systems.md',
+    ]);
+  });
+
+  it('sets assistant English note depth', () => {
+    expect(setConfigValue('assistantEnglishNoteDepth', 'compact').assistantEnglishNoteDepth).toBe('compact');
+    expect(setConfigValue('assistantEnglishNoteDepth', 'rich').assistantEnglishNoteDepth).toBe('rich');
+    expect(setConfigValue('assistantEnglishNoteDepth', 'lesson').assistantEnglishNoteDepth).toBe('lesson');
+  });
+
+  it('rejects invalid assistant English note depth', () => {
+    expect(() => setConfigValue('assistantEnglishNoteDepth', 'deep')).toThrow(
+      'assistantEnglishNoteDepth must be one of: compact, rich, lesson.',
+    );
+  });
+
   it('rejects ratio config values outside their valid range', () => {
     const highMax = runCli(['config', 'set', 'maxChineseRatio', '1.5']);
     const negativeTarget = runCli(['config', 'set', 'targetChineseRatio', '-0.1']);
@@ -119,6 +160,7 @@ describe('config commands', () => {
     const agentBackend = runCli(['config', 'set', 'externalAgentBackend', 'gemini']);
     const codexSandbox = runCli(['config', 'set', 'externalAgentCodexSandbox', 'root']);
     const gateMode = runCli(['config', 'set', 'gateMode', 'block']);
+    const noteStyle = runCli(['config', 'set', 'assistantEnglishNoteStyle', 'academic']);
 
     expect(intensity.exitCode).toBe(1);
     expect(intensity.stderr).toContain('coachingIntensity must be one of: low, medium, high, force');
@@ -136,6 +178,8 @@ describe('config commands', () => {
     );
     expect(gateMode.exitCode).toBe(1);
     expect(gateMode.stderr).toContain('gateMode must be one of: enforce, coach');
+    expect(noteStyle.exitCode).toBe(1);
+    expect(noteStyle.stderr).toContain('assistantEnglishNoteStyle must be one of: general, software-engineering');
   });
 
   it('supports scheduled ratio progression opt-in while rejecting unsupported modes', () => {

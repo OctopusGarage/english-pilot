@@ -987,7 +987,14 @@ describe('MCP tools', () => {
           id: 'feishu',
           label: 'Feishu/Lark',
           status: 'supported',
-          capabilities: ['long-connection', 'qr-onboarding', 'message-coaching', 'reply-coaching', 'review-items'],
+          capabilities: [
+            'long-connection',
+            'qr-onboarding',
+            'message-coaching',
+            'reply-coaching',
+            'review-items',
+            'daily-review-delivery',
+          ],
         },
         {
           id: 'wechat',
@@ -1030,8 +1037,8 @@ describe('MCP tools', () => {
         status: 'supported',
       },
       delivery: {
-        supported: false,
-        mode: 'payload-only',
+        supported: true,
+        mode: 'message',
       },
       pack: {
         date: reviewDate,
@@ -1108,7 +1115,14 @@ describe('MCP tools', () => {
         id: 'feishu',
         label: 'Feishu/Lark',
         status: 'supported',
-        capabilities: ['long-connection', 'qr-onboarding', 'message-coaching', 'reply-coaching', 'review-items'],
+        capabilities: [
+          'long-connection',
+          'qr-onboarding',
+          'message-coaching',
+          'reply-coaching',
+          'review-items',
+          'daily-review-delivery',
+        ],
       },
       mode: 'long-connection-bot',
       status: 'supported',

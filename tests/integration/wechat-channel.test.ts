@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, statSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -145,6 +145,29 @@ describe('WeChat long-connection channel', () => {
     expect(logs).toContain('Scan this QR code with WeChat to connect EnglishPilot:');
     expect(listWeChatAccounts()).toHaveLength(1);
     expect(statSync(join(getWeChatAccountsDir(), 'bot-im-wechat.json')).mode & 0o077).toBe(0);
+  });
+
+  it('skips malformed saved account files when loading WeChat channel readiness', () => {
+    const accountsDir = getWeChatAccountsDir();
+    mkdirSync(accountsDir, { recursive: true });
+    writeFileSync(join(home, 'wechat', 'accounts.json'), JSON.stringify(['broken-account', 'bot-im-bot']), 'utf8');
+    writeFileSync(join(accountsDir, 'broken-account.json'), '{not json}\n', 'utf8');
+    saveWeChatAccount({
+      accountId: 'bot-im-bot',
+      token: 'secret-token',
+      baseUrl: 'https://ilinkai.weixin.qq.com',
+      userId: 'wxid_owner@im.wechat',
+    });
+
+    const dryRun = runCli(['wechat', 'start', '--dry-run', '--json']);
+
+    expect(dryRun.exitCode).toBe(0);
+    expect(dryRun.stderr).toBe('');
+    expect(JSON.parse(dryRun.stdout)).toMatchObject({
+      ready: true,
+      accountCount: 1,
+      allowedUsers: 1,
+    });
   });
 
   it('fails QR onboarding before polling when the QR API omits the QR code', async () => {
