@@ -25,7 +25,7 @@ the most important user-visible paths:
 - Claude/Codex agent eval fixtures preserve the required English note format
   and can turn learning history into a lesson with IPA and a practice speech.
 
-Full-module confidence comes from `npm run project-health`, not from manually
+Full-module confidence comes from `pnpm run project-health`, not from manually
 enumerating every module in smoke eval.
 
 ## Local Commands
@@ -43,15 +43,15 @@ is a published CLI feature. Shell orchestration stays under `scripts/`, for exam
 Run a focused test layer:
 
 ```bash
-npm run test:unit
-npm run test:integration
-npm run test:eval
+pnpm run test:unit
+pnpm run test:integration
+pnpm run test:eval
 ```
 
 Run the full deterministic local eval suite:
 
 ```bash
-npm run eval:suite
+pnpm run eval:suite
 ```
 
 This is equivalent to:
@@ -62,7 +62,7 @@ scripts/eval-suite.sh --backend both
 
 By default it runs:
 
-- `npm run build`;
+- `pnpm run build`;
 - deterministic smoke eval;
 - MCP stdio smoke against the built CLI;
 - Claude agent evals in dry-run mode;
@@ -74,9 +74,9 @@ do not call real Claude or Codex.
 Run a narrower smoke check:
 
 ```bash
-npm run build
-npm run smoke:json
-npm run smoke:mcp-stdio
+pnpm run build
+pnpm run smoke:json
+pnpm run smoke:mcp-stdio
 ```
 
 Print reusable Claude/Codex prompt fixtures:
@@ -88,11 +88,11 @@ node dist/src/bin/english-pilot.js eval prompts
 Run one dry-run agent eval:
 
 ```bash
-npm run build
-npm run eval:agent:codex:dry
-npm run eval:agent:claude:dry
-npm run eval:agent:codex:history:dry
-npm run eval:agent:claude:history:dry
+pnpm run build
+pnpm run eval:agent:codex:dry
+pnpm run eval:agent:claude:dry
+pnpm run eval:agent:codex:history:dry
+pnpm run eval:agent:claude:history:dry
 ```
 
 Available agent eval cases:
@@ -118,7 +118,7 @@ CLI versions, so it is intentionally opt-in.
 Run the full local quality gate before larger changes:
 
 ```bash
-npm run project-health
+pnpm run project-health
 ```
 
 It runs:
@@ -137,14 +137,14 @@ It runs:
 Run the stricter pre-release gate:
 
 ```bash
-npm run verify
+pnpm run verify
 ```
 
-`verify` adds full-history gitleaks and npm audit before `project-health`.
+`verify` adds full-history gitleaks and pnpm audit before `project-health`.
 
 ## Portable Fixtures
 
-`npm run portable-fixtures` blocks personal machine paths and local-only fixture
+`pnpm run portable-fixtures` blocks personal machine paths and local-only fixture
 names from entering source, tests, docs, or eval fixtures.
 
 The script prefers `rg` when available and falls back to `git grep`, so it works
@@ -167,7 +167,7 @@ The repo includes Claude Code commands under `.claude/commands/`:
 Agents should choose the smallest useful check:
 
 - after language-gate or coaching changes, run smoke eval;
-- after MCP config/tool registration changes, run `npm run smoke:mcp-stdio`;
+- after MCP config/tool registration changes, run `pnpm run smoke:mcp-stdio`;
 - after AgentRunner or external-channel prompt changes, run eval suite;
 - after history/review/brief changes, run `/agent-eval <backend> history-lesson --dry-run`;
 - before release or broad refactors, run `project-health`;

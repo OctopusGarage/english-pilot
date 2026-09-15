@@ -153,10 +153,10 @@ curl -fsSL https://raw.githubusercontent.com/OctopusGarage/english-pilot/main/in
   ENGLISH_PILOT_VERSION=vX.Y.Z bash
 ```
 
-Or use npm after the package is published:
+Or use pnpm after the package is published to the npm registry:
 
 ```bash
-npm install -g @octopusgarage/english-pilot
+pnpm add -g @octopusgarage/english-pilot
 english-pilot setup --yes
 ```
 
@@ -202,8 +202,8 @@ Run a quick local behavior check:
 
 ```bash
 english-pilot eval smoke --json
-npm run smoke:mcp-stdio
-npm run eval:suite
+pnpm run smoke:mcp-stdio
+pnpm run eval:suite
 ```
 
 See [Eval and Quality Gates](docs/eval-and-quality.md) for smoke coverage,
@@ -321,15 +321,15 @@ Eval details are documented in [Eval and Quality Gates](docs/eval-and-quality.md
 ## Development
 
 ```bash
-npm ci
-npm run lint
-npm run typecheck
-npm test
-npm run smoke
-npm run smoke:mcp-stdio
-npm run eval:suite
-npm run project-health
-npm run verify
+pnpm install --frozen-lockfile
+pnpm run lint
+pnpm run typecheck
+pnpm test
+pnpm run smoke
+pnpm run smoke:mcp-stdio
+pnpm run eval:suite
+pnpm run project-health
+pnpm run verify
 ```
 
 Use [Eval and Quality Gates](docs/eval-and-quality.md) for the detailed

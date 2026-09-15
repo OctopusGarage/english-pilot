@@ -9,8 +9,8 @@ type PackageManifest = {
   devDependencies: Record<string, string>;
 };
 
-type PackageLock = {
-  packages: Record<string, { version?: string }>;
+type PnpmLock = {
+  snapshots: Record<string, unknown>;
 };
 
 type Workflow = {
@@ -44,9 +44,11 @@ describe('Dependabot auto-merge workflow', () => {
   });
 
   it('locks the MCP SDK at the audited safe release', () => {
-    const lockfile = JSON.parse(readFileSync(join(root, 'package-lock.json'), 'utf8')) as PackageLock;
+    const lockfile = parse(readFileSync(join(root, 'pnpm-lock.yaml'), 'utf8')) as PnpmLock;
 
-    expect(lockfile.packages['node_modules/@modelcontextprotocol/sdk']?.version).toBe('1.30.0');
+    expect(Object.keys(lockfile.snapshots).some((key) => key.startsWith('@modelcontextprotocol/sdk@1.30.0'))).toBe(
+      true,
+    );
   });
 
   it('handles Dependabot pull-request lifecycle events and identities', () => {

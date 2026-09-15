@@ -22,7 +22,7 @@ Assert that the workflow listens to `opened`, `synchronize`, and `reopened`; acc
 
 - [ ] **Step 2: Run the focused test**
 
-Run: `npm test -- --run tests/dependabot-auto-merge-workflow.test.ts`
+Run: `pnpm test -- --run tests/dependabot-auto-merge-workflow.test.ts`
 
 Expected: FAIL because the current workflow does not expose the new event, identity, retarget, and version-gating contract.
 
@@ -43,7 +43,7 @@ Ignore semver-major updates for npm and GitHub Actions while preserving weekly g
 
 - [ ] **Step 3: Run the focused test**
 
-Run: `npm test -- --run tests/dependabot-auto-merge-workflow.test.ts`
+Run: `pnpm test -- --run tests/dependabot-auto-merge-workflow.test.ts`
 
 Expected: PASS.
 
@@ -55,13 +55,13 @@ Expected: PASS.
 
 - [ ] **Step 1: Build and run the full test suite**
 
-Run: `npm run build && npm test`
+Run: `pnpm run build && pnpm test`
 
 Expected: exit code 0 with no failed tests.
 
 - [ ] **Step 2: Run the repository smoke checks**
 
-Run: `npm run smoke:json && npm run smoke:mcp-stdio`
+Run: `pnpm run smoke:json && pnpm run smoke:mcp-stdio`
 
 Expected: the JSON report has `passed: true`, and MCP stdio smoke exits successfully.
 

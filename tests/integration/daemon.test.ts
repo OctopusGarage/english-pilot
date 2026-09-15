@@ -596,7 +596,7 @@ describe('daemon runtime infrastructure', () => {
     const wrapper = readFileSync('scripts/dev-launchd-wrapper.sh', 'utf8');
 
     expect(wrapper).toContain('dev-supervisor.mjs');
-    expect(wrapper).not.toContain('npm run build');
+    expect(wrapper).not.toContain('pnpm run build');
     expect(wrapper).not.toContain('exec "$NODE_BIN" "$CLI_JS" run');
   });
 
@@ -692,7 +692,7 @@ describe('daemon runtime infrastructure', () => {
     const calls = join(home, 'launchctl-calls.log');
     mkdirSync(fakeBin, { recursive: true });
     writeExecutable(join(fakeBin, 'node'), ['#!/bin/sh', 'echo fake-node "$@"', ''].join('\n'));
-    writeExecutable(join(fakeBin, 'npm'), ['#!/bin/sh', 'echo fake-npm "$@"', ''].join('\n'));
+    writeExecutable(join(fakeBin, 'pnpm'), ['#!/bin/sh', 'echo fake-pnpm "$@"', ''].join('\n'));
     writeExecutable(join(fakeBin, 'launchctl'), ['#!/bin/sh', 'echo "$*" >> "$CALLS"', 'exit 0', ''].join('\n'));
     writeExecutable(
       join(fakeBin, 'id'),

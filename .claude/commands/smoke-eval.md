@@ -16,7 +16,7 @@ Argument: `$ARGUMENTS`
 
 Do this:
 
-1. Run `npm run build` so the `dist` CLI matches the current source.
+1. Run `pnpm run build` so the `dist` CLI matches the current source.
 2. If `$ARGUMENTS` contains `--prompts`, run:
 
    ```bash
@@ -28,8 +28,8 @@ Do this:
 3. Otherwise run:
 
    ```bash
-   npm run smoke:json
-   npm run smoke:mcp-stdio
+   pnpm run smoke:json
+   pnpm run smoke:mcp-stdio
    ```
 
 4. Parse the JSON output. Report:
@@ -41,10 +41,10 @@ Do this:
 5. If a case fails, do not guess. Run the narrow related test first, then inspect
    the failing path:
 
-   - gate cases: `npm test -- --run tests/eval/smoke-eval.test.ts tests/unit/analyze.test.ts tests/integration/coaching.test.ts`
-   - channel coaching cases: `npm test -- --run tests/eval/smoke-eval.test.ts tests/integration/feishu-channel.test.ts tests/integration/wechat-channel.test.ts`
-   - agent dry-run cases: `npm test -- --run tests/eval/smoke-eval.test.ts tests/integration/agent-runner.test.ts`
-   - MCP stdio cases: `npm run build && npm run smoke:mcp-stdio`
+   - gate cases: `pnpm test -- --run tests/eval/smoke-eval.test.ts tests/unit/analyze.test.ts tests/integration/coaching.test.ts`
+   - channel coaching cases: `pnpm test -- --run tests/eval/smoke-eval.test.ts tests/integration/feishu-channel.test.ts tests/integration/wechat-channel.test.ts`
+   - agent dry-run cases: `pnpm test -- --run tests/eval/smoke-eval.test.ts tests/integration/agent-runner.test.ts`
+   - MCP stdio cases: `pnpm run build && pnpm run smoke:mcp-stdio`
 
 6. Keep the final report concise. Mention that the smoke eval uses a temporary
    EnglishPilot home directory, the MCP stdio smoke starts a local child

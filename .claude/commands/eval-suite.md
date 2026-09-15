@@ -45,7 +45,7 @@ Do this:
 3. If something fails, run the narrow related tests before editing:
 
    ```bash
-   npm test -- --run tests/eval/smoke-eval.test.ts tests/integration/agent-runner.test.ts
+   pnpm test -- --run tests/eval/smoke-eval.test.ts tests/integration/agent-runner.test.ts
    ```
 
 4. Keep the report concise. State clearly whether real Claude/Codex was invoked.

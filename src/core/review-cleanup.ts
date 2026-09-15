@@ -69,7 +69,7 @@ function looksLikeTaskInstruction(text: string): boolean {
   return (
     /(?:Spec to check|Commit to review|Task \d+|Do not edit files|Report DONE|APPROVED|CHANGES_REQUESTED)/i.test(
       text,
-    ) && /(?:\/Users\/|content\/|docs\/|tests\/|npm run|git commit|file paths?)/i.test(text)
+    ) && /(?:\/Users\/|content\/|docs\/|tests\/|npm run|pnpm run|git commit|file paths?)/i.test(text)
   );
 }
 

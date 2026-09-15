@@ -9,8 +9,9 @@ Deploy or inspect EnglishPilot on `ys-aquria@mac2015.local`.
 Argument: `$ARGUMENTS`
 
 - Empty argument runs the read-only `status` mode.
-- `deploy` builds and packs the current local checkout, copies the npm tarball
-  to mac2015, installs it globally for `ys-aquria`, and restarts EnglishPilot.
+- `deploy` builds and packs the current local checkout, copies the package
+  tarball to mac2015, installs it globally for `ys-aquria`, and restarts
+  EnglishPilot.
 - Runtime state under `~/.english-pilot` is preserved.
 
 Run:

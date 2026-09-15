@@ -11,7 +11,7 @@ updates:
         update-types:
           - version-update:semver-major
     groups:
-      npm-minor-patch:
+      pnpm-minor-patch:
         update-types:
           - minor
           - patch

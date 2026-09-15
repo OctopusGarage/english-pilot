@@ -14,13 +14,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2 # v4.1.0
+        with:
+          version: 10.32.1
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: npm run audit
-      - run: npm run project-health
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run audit
+      - run: pnpm run project-health
       - uses: actions/upload-code-coverage@d8e329117199404bba6fc81efe8093dc7c015e34 # v1
         with:
           file: coverage/cobertura-coverage.xml

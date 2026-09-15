@@ -6,7 +6,11 @@ import { join } from 'node:path';
 const repo = process.cwd();
 const srcDir = join(repo, 'src');
 const cliPath = join(repo, 'dist', 'src', 'bin', 'english-pilot.js');
-const statusPath = join(process.env.ENGLISH_PILOT_HOME ?? join(process.env.HOME ?? repo, '.english-pilot'), 'run', 'dev-supervisor.json');
+const statusPath = join(
+  process.env.ENGLISH_PILOT_HOME ?? join(process.env.HOME ?? repo, '.english-pilot'),
+  'run',
+  'dev-supervisor.json',
+);
 const debounceMs = Number.parseInt(process.env.ENGLISH_PILOT_DEV_RELOAD_DEBOUNCE_MS ?? '300', 10);
 
 let child;
@@ -27,10 +31,13 @@ function watchSource() {
   watcher = watch(srcDir, { recursive: true }, (_event, file) => {
     if (!file || !shouldReload(String(file))) return;
     if (timer) clearTimeout(timer);
-    timer = setTimeout(() => {
-      pending = true;
-      void drainReloads(String(file));
-    }, Number.isFinite(debounceMs) ? debounceMs : 300);
+    timer = setTimeout(
+      () => {
+        pending = true;
+        void drainReloads(String(file));
+      },
+      Number.isFinite(debounceMs) ? debounceMs : 300,
+    );
   });
 }
 
@@ -51,7 +58,7 @@ async function rebuildAndRestart(reason) {
   writeStatus({ state: 'building', reason });
   const code = await runBuild();
   if (code !== 0) {
-    writeStatus({ state: 'build-failed', reason, lastError: `npm run build exited ${code}` });
+    writeStatus({ state: 'build-failed', reason, lastError: `pnpm run build exited ${code}` });
     log(`build failed; keeping last-good daemon (exit ${code})`);
     return;
   }
@@ -64,7 +71,7 @@ async function rebuildAndRestart(reason) {
 
 function runBuild() {
   return new Promise((resolve) => {
-    const build = spawn('npm', ['run', 'build'], {
+    const build = spawn('pnpm', ['run', 'build'], {
       cwd: repo,
       env: process.env,
       stdio: 'inherit',
@@ -90,7 +97,10 @@ function startChild() {
     const expected = stoppingForReload;
     child = undefined;
     if (expected) return;
-    writeStatus({ state: 'daemon-exited', lastError: `daemon exited code=${code ?? 'null'} signal=${signal ?? 'null'}` });
+    writeStatus({
+      state: 'daemon-exited',
+      lastError: `daemon exited code=${code ?? 'null'} signal=${signal ?? 'null'}`,
+    });
     log(`daemon exited unexpectedly code=${code ?? 'null'} signal=${signal ?? 'null'}`);
     process.exitCode = code ?? 1;
     watcher?.close();

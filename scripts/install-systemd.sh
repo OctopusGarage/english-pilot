@@ -9,7 +9,7 @@ UNIT="$UNIT_DIR/english-pilot.service"
 RUNTIME_HOME="${ENGLISH_PILOT_HOME:-$HOME/.english-pilot}"
 
 if [ ! -f "$CLI_JS" ]; then
-  echo "Build EnglishPilot before installing the service: npm run build" >&2
+  echo "Build EnglishPilot before installing the service: pnpm run build" >&2
   exit 1
 fi
 

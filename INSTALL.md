@@ -13,10 +13,10 @@ curl -fsSL https://raw.githubusercontent.com/OctopusGarage/english-pilot/main/in
   ENGLISH_PILOT_VERSION=vX.Y.Z bash
 ```
 
-Install from npm after the npm package is published:
+Install from the npm registry after the package is published:
 
 ```bash
-npm install -g @octopusgarage/english-pilot
+pnpm add -g @octopusgarage/english-pilot
 english-pilot setup --yes
 ```
 

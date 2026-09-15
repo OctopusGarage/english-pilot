@@ -29,7 +29,7 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 if [ ! -f "$CLI_JS" ]; then
-  echo "feishu-daily-review-launchd-wrapper: missing $CLI_JS; run npm run build before installing the schedule" >&2
+  echo "feishu-daily-review-launchd-wrapper: missing $CLI_JS; run pnpm run build before installing the schedule" >&2
   exit 1
 fi
 

@@ -24,7 +24,7 @@ Case selection:
 
 Do this:
 
-1. Run `npm run build`.
+1. Run `pnpm run build`.
 2. Run:
 
    ```bash
@@ -43,7 +43,7 @@ Do this:
 4. If the eval fails, run the narrow deterministic checks before editing code:
 
    ```bash
-   npm test -- --run tests/eval/smoke-eval.test.ts tests/integration/agent-runner.test.ts
+   pnpm test -- --run tests/eval/smoke-eval.test.ts tests/integration/agent-runner.test.ts
    ```
 
 5. Keep the report concise. State clearly whether a real model was invoked or

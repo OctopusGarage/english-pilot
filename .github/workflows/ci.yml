@@ -17,25 +17,28 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2 # v4.1.0
+        with:
+          version: 10.32.1
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: npm run audit
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run audit
         if: matrix.os == 'ubuntu-latest'
       - run: shellcheck --severity=warning scripts/*.sh
         if: matrix.os == 'ubuntu-latest'
       - run: scripts/verify-systemd-unit.sh
         if: matrix.os == 'ubuntu-latest'
-      - run: npm run lint
-      - run: npm run portable-fixtures
-      - run: npm run typecheck
-      - run: npm run test:coverage
-      - run: npm run build
-      - run: npm run smoke
-      - run: npm run depcruise
-      - run: npm run knip
+      - run: pnpm run lint
+      - run: pnpm run portable-fixtures
+      - run: pnpm run typecheck
+      - run: pnpm run test:coverage
+      - run: pnpm run build
+      - run: pnpm run smoke
+      - run: pnpm run depcruise
+      - run: pnpm run knip
 
   verify:
     needs: checks

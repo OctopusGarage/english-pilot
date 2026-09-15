@@ -18,10 +18,10 @@ prepend_path_dir() {
 
 SERVICE_PATH="$BASE_SERVICE_PATH"
 NODE_COMMAND="$(command -v node 2>/dev/null || true)"
-NPM_COMMAND="$(command -v npm 2>/dev/null || true)"
+PNPM_COMMAND="$(command -v pnpm 2>/dev/null || true)"
 TCB_COMMAND="$(command -v tcb 2>/dev/null || true)"
 prepend_path_dir "${NODE_COMMAND%/*}"
-prepend_path_dir "${NPM_COMMAND%/*}"
+prepend_path_dir "${PNPM_COMMAND%/*}"
 prepend_path_dir "${TCB_COMMAND%/*}"
 
 if [ ! -f "$ROOT/scripts/feishu-daily-review-launchd-wrapper.sh" ]; then

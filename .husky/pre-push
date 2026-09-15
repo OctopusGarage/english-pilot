@@ -1,2 +1,2 @@
-npm run secrets
-npm run ci
+pnpm run secrets
+pnpm run ci
