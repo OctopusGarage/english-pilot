@@ -14,6 +14,7 @@ import {
   loadWeChatSyncCursor,
   saveWeChatAccount,
 } from '../../src/channels/wechat/state.js';
+import { runWeChatUpdateStream } from '../../src/channels/wechat/update-stream.js';
 import { listLearningItems, listPromptEvents } from '../../src/storage/repository.js';
 
 describe('WeChat long-connection channel', () => {
@@ -632,6 +633,30 @@ describe('WeChat long-connection channel', () => {
     expect(cursors).toEqual(['', '']);
     expect(delays).toEqual([3000]);
     expect(loadWeChatSyncCursor(account.accountId)).toBe('cursor-after-retry');
+  });
+
+  it('advances the WeChat sync cursor only after async message handling completes', async () => {
+    const account = accountFixture();
+    const handled: string[] = [];
+
+    await runWeChatUpdateStream({
+      account,
+      botAgent: 'EnglishPilot/0.1.0',
+      maxIterations: 1,
+      getUpdates: async () => ({
+        ret: 0,
+        msgs: [wechatTextMessage('Please handle this before moving the cursor.')],
+        get_updates_buf: 'cursor-after-message',
+      }),
+      notifyStop: async () => {},
+      onMessage: async (message) => {
+        expect(loadWeChatSyncCursor(account.accountId)).toBe('');
+        handled.push(String(message.message_id));
+      },
+    });
+
+    expect(handled).toEqual(['msg-44']);
+    expect(loadWeChatSyncCursor(account.accountId)).toBe('cursor-after-message');
   });
 });
 

@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer, type Socket } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -47,6 +47,9 @@ describe('daemon runtime infrastructure', () => {
     expect(layout.controlSocketPath).toBe(join(home, 'run', 'english-pilot.sock'));
     expect(existsSync(layout.logsDir)).toBe(true);
     expect(existsSync(layout.runDir)).toBe(true);
+    expect(statSync(layout.home).mode & 0o077).toBe(0);
+    expect(statSync(layout.logsDir).mode & 0o077).toBe(0);
+    expect(statSync(layout.runDir).mode & 0o077).toBe(0);
   });
 
   it('prevents duplicate daemon instances with an atomic lock', () => {
@@ -173,6 +176,7 @@ describe('daemon runtime infrastructure', () => {
           wechat: 'disabled',
         },
       });
+      expect(statSync(layout.controlSocketPath).mode & 0o077).toBe(0);
     } finally {
       await server.close();
     }
@@ -712,6 +716,65 @@ describe('daemon runtime infrastructure', () => {
       `<string>${fakeBin}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>`,
     );
     expect(readFileSync(calls, 'utf8')).toContain('bootstrap gui/501');
+  });
+
+  it('uses ENGLISH_PILOT_HOME in generated launchd runtime paths', () => {
+    const fakeBin = join(home, 'fake-launchd-bin');
+    const runtimeHome = join(home, 'custom-runtime-home');
+    mkdirSync(fakeBin, { recursive: true });
+    writeExecutable(join(fakeBin, 'launchctl'), ['#!/bin/sh', 'exit 0', ''].join('\n'));
+    writeExecutable(
+      join(fakeBin, 'id'),
+      ['#!/bin/sh', 'if [ "$1" = "-u" ]; then echo 501; else /usr/bin/id "$@"; fi', ''].join('\n'),
+    );
+
+    const result = spawnSync('sh', ['scripts/install-launchd.sh'], {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        HOME: home,
+        ENGLISH_PILOT_HOME: runtimeHome,
+        PATH: `${fakeBin}:${process.env.PATH ?? ''}`,
+      },
+    });
+
+    expect(result).toMatchObject({ status: 0 });
+    const plist = readFileSync(join(home, 'Library', 'LaunchAgents', 'com.octopusgarage.english-pilot.plist'), 'utf8');
+    expect(plist).toContain(`<string>${runtimeHome}</string>`);
+    expect(plist).toContain(`<string>${join(runtimeHome, 'logs', 'launchd.out.log')}</string>`);
+    expect(plist).not.toContain(`${home}/.english-pilot`);
+  });
+
+  it('uses ENGLISH_PILOT_HOME in generated systemd runtime paths', () => {
+    const fakeBin = join(home, 'fake-systemd-bin');
+    const runtimeHome = join(home, 'custom-runtime-home');
+    const cliPath = join(process.cwd(), 'dist', 'src', 'bin', 'english-pilot.js');
+    mkdirSync(fakeBin, { recursive: true });
+    mkdirSync(join(process.cwd(), 'dist', 'src', 'bin'), { recursive: true });
+    writeFileSync(cliPath, '#!/usr/bin/env node\n', 'utf8');
+    writeExecutable(join(fakeBin, 'systemctl'), ['#!/bin/sh', 'exit 0', ''].join('\n'));
+    writeExecutable(join(fakeBin, 'loginctl'), ['#!/bin/sh', 'exit 0', ''].join('\n'));
+
+    try {
+      const result = spawnSync('sh', ['scripts/install-systemd.sh'], {
+        cwd: process.cwd(),
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          HOME: home,
+          ENGLISH_PILOT_HOME: runtimeHome,
+          PATH: `${fakeBin}:${process.env.PATH ?? ''}`,
+        },
+      });
+
+      expect(result).toMatchObject({ status: 0 });
+      const unit = readFileSync(join(home, '.config', 'systemd', 'user', 'english-pilot.service'), 'utf8');
+      expect(unit).toContain(`Environment=ENGLISH_PILOT_HOME=${runtimeHome}`);
+      expect(unit).not.toContain(`${home}/.english-pilot`);
+    } finally {
+      rmSync(join(process.cwd(), 'dist'), { recursive: true, force: true });
+    }
   });
 
   it('includes daemon runtime paths in doctor output', () => {

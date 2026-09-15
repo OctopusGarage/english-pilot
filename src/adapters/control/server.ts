@@ -1,4 +1,4 @@
-import { existsSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, rmSync } from 'node:fs';
 import { createServer, type Server, type Socket } from 'node:net';
 import type {
   ControlRequest,
@@ -92,6 +92,7 @@ function listen(server: Server, socketPath: string): Promise<void> {
     server.once('error', reject);
     server.listen(socketPath, () => {
       server.off('error', reject);
+      chmodSync(socketPath, 0o600);
       resolve();
     });
   });

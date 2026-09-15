@@ -37,6 +37,22 @@ describe('agent session store', () => {
     expect(clearAgentSession('feishu:chat-1')).toBe(false);
   });
 
+  it('keeps sessions for the same scope isolated by backend and cwd', () => {
+    saveAgentSessionFromResult('feishu:chat-1', runResult({ sessionId: 'claude-1', cwd: '/tmp/project-a' }));
+    saveAgentSessionFromResult('feishu:chat-1', runResult({ threadId: 'codex-1', cwd: '/tmp/project-a' }));
+    saveAgentSessionFromResult('feishu:chat-1', runResult({ sessionId: 'claude-2', cwd: '/tmp/project-b' }));
+
+    expect(getAgentSession('feishu:chat-1', 'claude', '/tmp/project-a')).toMatchObject({
+      sessionId: 'claude-1',
+    });
+    expect(getAgentSession('feishu:chat-1', 'codex', '/tmp/project-a')).toMatchObject({
+      threadId: 'codex-1',
+    });
+    expect(getAgentSession('feishu:chat-1', 'claude', '/tmp/project-b')).toMatchObject({
+      sessionId: 'claude-2',
+    });
+  });
+
   it('ignores malformed persisted entries instead of restoring unsafe session state', () => {
     writeFileSync(
       join(home, 'agent-sessions.json'),
@@ -61,18 +77,20 @@ describe('agent session store', () => {
   });
 });
 
-function runResult(ids: { sessionId: string }): ExternalAgentRunResult {
+function runResult(ids: { sessionId?: string; threadId?: string; cwd?: string }): ExternalAgentRunResult {
+  const backend = ids.threadId ? 'codex' : 'claude';
   return {
     operation: 'external-agent-run',
-    backend: 'claude',
-    command: 'claude',
+    backend,
+    command: backend,
     args: [],
-    cwd: '/tmp/project',
+    cwd: ids.cwd ?? '/tmp/project',
     promptStdin: 'Hello',
     dryRun: false,
     exitCode: 0,
     stdout: '',
     stderr: '',
-    sessionId: ids.sessionId,
+    ...(ids.sessionId ? { sessionId: ids.sessionId } : {}),
+    ...(ids.threadId ? { threadId: ids.threadId } : {}),
   };
 }
