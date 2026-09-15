@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { getEnglishPilotHome } from '../core/config.js';
+import { ensureRuntimeLayout } from '../core/infra/state-dir.js';
 import {
   buildDailyReviewDeliveryDryRun,
   buildDailyReviewDeliveryPayload,
@@ -37,7 +38,9 @@ import {
 import { listGlossaryEntries } from '../core/glossary.js';
 import { isDateKey } from '../core/review-schedule.js';
 import { listLearningItems, recordLearningItem } from '../storage/repository.js';
+import { createControlClient } from './control/client.js';
 import type { CliAsyncOptions, CliResult } from './cli-types.js';
+import type { WeChatDailyReviewDaemonDeliveryResult } from './control/protocol.js';
 
 export function runIntegrations(args: string[]): CliResult {
   const [subcommand] = args;
@@ -382,6 +385,53 @@ export async function runIntegrationSend(args: string[], options: CliAsyncOption
       stderr: `${error instanceof Error ? error.message : String(error)}\n`,
     };
   }
+}
+
+export async function runIntegrationDeliver(args: string[]): Promise<CliResult> {
+  const target = findIntegrationTarget(getFlagValue(args, '--target'));
+  const date = getFlagValue(args, '--date') ?? new Date().toISOString().slice(0, 10);
+  if (!target || target.id !== 'wechat' || !isDateKey(date)) {
+    return usage('english-pilot integrations deliver --target wechat [--date YYYY-MM-DD] [--json]');
+  }
+
+  const payload = buildDailyReviewDeliveryPayload({ target, date, items: listLearningItems() });
+  try {
+    const result = await createControlClient(ensureRuntimeLayout().controlSocketPath).deliverWeChatDailyReview(payload);
+    return {
+      exitCode: result.delivered ? 0 : 1,
+      stdout: args.includes('--json') ? `${JSON.stringify(result, null, 2)}\n` : formatWeChatDaemonDelivery(result),
+      stderr: '',
+    };
+  } catch (error) {
+    const result: WeChatDailyReviewDaemonDeliveryResult = {
+      operation: 'wechat-daily-review-daemon-delivery',
+      delivered: false,
+      network: false,
+      accountCount: 0,
+      recipientCount: 0,
+      messagePreview: payload.pack.markdown.replace(/\s+/g, ' ').trim().slice(0, 240),
+      blocker: `EnglishPilot daemon is not reachable through the local control socket: ${
+        error instanceof Error ? error.message : String(error)
+      }. Start an already configured daemon with \`english-pilot run\` or the managed service.`,
+    };
+    return {
+      exitCode: 1,
+      stdout: args.includes('--json') ? `${JSON.stringify(result, null, 2)}\n` : formatWeChatDaemonDelivery(result),
+      stderr: '',
+    };
+  }
+}
+
+function formatWeChatDaemonDelivery(result: WeChatDailyReviewDaemonDeliveryResult): string {
+  return [
+    'WeChat daily review daemon delivery',
+    `Delivered: ${result.delivered ? 'yes' : 'no'}`,
+    `Network: ${result.network ? 'yes, through the daemon-owned long connection' : 'no'}`,
+    `Accounts: ${result.accountCount}`,
+    `Recipients: ${result.recipientCount}`,
+    ...(result.blocker ? [`Blocker: ${result.blocker}`] : []),
+    '',
+  ].join('\n');
 }
 
 function formatIntegrationNetworkDelivery(result: IntegrationNetworkDeliveryResult): string {

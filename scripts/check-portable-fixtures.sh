@@ -10,6 +10,7 @@ if command -v rg >/dev/null 2>&1; then
     --glob '!coverage/**' \
     --glob '!reports/**' \
     --glob '!badges/**' \
+    --glob '!.git' \
     --glob '!.git/**' \
     --glob '!scripts/check-portable-fixtures.sh' \
     "$PATTERN" .; then

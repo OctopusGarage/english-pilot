@@ -92,10 +92,10 @@ export async function runWeChatUpdateStream(input: WeChatUpdateStreamInput): Pro
         await wait(60_000);
         continue;
       }
-      if (updates.ret && updates.ret !== 0) {
+      if (isNonZeroStatus(updates.ret) || isNonZeroStatus(updates.errcode)) {
         const delayMs = reconnectDelayMs(1);
         input.log?.(
-          `WeChat getupdates failed for ${input.account.accountId} (ret=${updates.ret}, retry in ${Math.round(
+          `WeChat getupdates failed for ${input.account.accountId} (${formatStatus(updates)}, retry in ${Math.round(
             delayMs / 1000,
           )}s): ${updates.errmsg ?? 'unknown error'}`,
         );
@@ -140,6 +140,14 @@ export async function runWeChatUpdateStream(input: WeChatUpdateStreamInput): Pro
       });
     }
   }
+}
+
+function isNonZeroStatus(value: number | undefined): boolean {
+  return value !== undefined && value !== 0;
+}
+
+function formatStatus(updates: { ret?: number; errcode?: number }): string {
+  return updates.ret !== undefined ? `ret=${updates.ret}` : `errcode=${updates.errcode}`;
 }
 
 function reconnectDelayMs(failures: number): number {

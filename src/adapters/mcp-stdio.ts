@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { handleMcpToolCall, handleMcpToolCallAsync } from './mcp-server.js';
-import { listMcpToolDefinitions, type EnglishPilotMcpToolName } from './mcp-tool-registry.js';
+import { type EnglishPilotMcpToolName, listMcpToolDefinitions } from './mcp-tool-catalog.js';
 
 export function createMcpServer(): McpServer {
   const server = new McpServer({

@@ -76,7 +76,7 @@ export interface DoctorExport {
   path: string;
 }
 
-export function doctor(): DoctorReport {
+export function doctor(input: { daemon?: DoctorReport['daemon'] } = {}): DoctorReport {
   const home = getEnglishPilotHome();
   const configPath = getConfigPath();
   const report: DoctorReport = {
@@ -84,7 +84,7 @@ export function doctor(): DoctorReport {
     home,
     config: { ok: true, path: configPath },
     storage: { ok: true, path: home },
-    daemon: inspectDaemon(),
+    daemon: input.daemon ?? inspectDaemon(),
     rewrite: { backend: 'off', ready: true },
     claude: inspectClaudeInstall(resolveInstallHome()),
     codex: inspectCodexInstall(resolveInstallHome()),

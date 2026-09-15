@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { doctor, getEnglishPilotHome, writeDoctorMarkdown } from '../core/config.js';
+import { getDaemonStatusSnapshot } from '../daemon/run-daemon.js';
 import { buildExternalValidationBundle, verifyExternalValidationBundle } from '../core/external-validation-bundle.js';
 import { listGlossaryEntries, removeGlossaryEntry, upsertGlossaryEntry } from '../core/glossary.js';
 import { buildProjectStatus, type ProjectStatus } from '../core/status.js';
@@ -134,6 +135,28 @@ export function runExport(args: string[]): CliResult {
 
 export function runDoctor(args: string[]): CliResult {
   const report = doctor();
+  return formatDoctorResult(args, report);
+}
+
+export async function runDoctorAsync(args: string[]): Promise<CliResult> {
+  const daemon = await getDaemonStatusSnapshot();
+  const report = doctor({
+    daemon: {
+      running: daemon.running,
+      socketReachable: daemon.socketReachable,
+      controlSocketPath: daemon.controlSocketPath,
+      instanceLockPath: daemon.instanceLockPath,
+      runningMarkerPath: daemon.runningMarkerPath,
+      daemonLogPath: daemon.daemonLogPath,
+      uncleanRestart: daemon.uncleanRestart,
+      ...(daemon.pid !== undefined ? { pid: daemon.pid } : {}),
+      ...(daemon.startedAt !== undefined ? { startedAt: daemon.startedAt } : {}),
+    },
+  });
+  return formatDoctorResult(args, report);
+}
+
+function formatDoctorResult(args: string[], report: ReturnType<typeof doctor>): CliResult {
   const doctorExport = args.includes('--write')
     ? writeDoctorMarkdown(report, getFlagValue(args, '--dir') ?? join(getEnglishPilotHome(), 'diagnostics'))
     : undefined;

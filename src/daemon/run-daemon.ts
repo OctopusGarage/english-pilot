@@ -8,6 +8,7 @@ import { createRuntimeLogger, type RuntimeLogger } from '../core/infra/logger.js
 import { detectUncleanRestart, markCleanShutdown, markRunning } from '../core/infra/lifecycle.js';
 import { ensureRuntimeLayout, type RuntimeLayout } from '../core/infra/state-dir.js';
 import { defaultDaemonChannelRuntimes, startConfiguredChannelRuntimes } from './channel-lifecycle.js';
+import { createWeChatDailyReviewDeliveryHandler } from './wechat-daily-review-delivery.js';
 
 export interface DaemonRunResult {
   operation: 'daemon-run';
@@ -157,6 +158,9 @@ async function startDaemonRuntime(input: {
       ok: true,
       pid: process.pid,
       startedAt: marker.startedAt,
+      channels: input.initialChannels,
+    }),
+    deliverWeChatDailyReview: createWeChatDailyReviewDeliveryHandler({
       channels: input.initialChannels,
     }),
   });

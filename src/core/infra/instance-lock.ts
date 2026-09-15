@@ -1,4 +1,4 @@
-import { closeSync, existsSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, openSync, readFileSync, rmSync, writeSync } from 'node:fs';
 
 export class InstanceLockHeldError extends Error {
   constructor(
@@ -21,13 +21,21 @@ export function createInstanceLock(lockPath: string, pid = process.pid): Instanc
     acquire() {
       if (acquired) return;
       try {
-        const fd = openSync(lockPath, 'wx');
-        closeSync(fd);
-        writeFileSync(lockPath, JSON.stringify({ pid, acquiredAt: new Date().toISOString() }), 'utf8');
+        const fd = openSync(lockPath, 'wx', 0o600);
+        try {
+          writeSync(fd, JSON.stringify({ pid, acquiredAt: new Date().toISOString() }), undefined, 'utf8');
+        } finally {
+          closeSync(fd);
+        }
         acquired = true;
       } catch (error) {
         if (!existsSync(lockPath)) throw error;
         const lockPid = readLockPid(lockPath);
+        if (lockPid === undefined) {
+          rmSync(lockPath, { force: true });
+          this.acquire();
+          return;
+        }
         if (lockPid !== undefined && !isProcessAlive(lockPid)) {
           rmSync(lockPath, { force: true });
           this.acquire();
