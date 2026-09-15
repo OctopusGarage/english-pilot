@@ -53,6 +53,9 @@ describe('runCli', () => {
       'english-pilot agent run --text "..." [--backend claude|codex] [--cwd <path>] [--dry-run] [--json]',
     );
     expect(result.stdout).toContain(
+      'english-pilot integrations deliver --target feishu|wechat [--date YYYY-MM-DD] [--json]',
+    );
+    expect(result.stdout).toContain(
       'english-pilot gate disable (--repo-ignore|--global-ignore) [--cwd <path>] [--json]',
     );
   });
@@ -595,6 +598,7 @@ describe('runCli', () => {
           'integrations message-coaching --record',
           'integrations event-coaching',
           'integrations deliver',
+          'integrations deliver --target feishu|wechat',
           'doctor',
         ]),
         mcp: expect.arrayContaining([
@@ -625,7 +629,8 @@ describe('runCli', () => {
           'WeChat conversation thread resume',
           'WeChat voice transcript-to-agent routing',
           'WeChat long-connection reconnect and session refresh guidance',
-          'WeChat account-validation-gated sender',
+          'WeChat daemon-mediated daily-review delivery',
+          'Deprecated WeChat direct HTTP/request-preview sender block',
         ]),
         voice: [],
       },
@@ -1240,7 +1245,14 @@ describe('runCli', () => {
           id: 'feishu',
           label: 'Feishu/Lark',
           status: 'supported',
-          capabilities: ['long-connection', 'qr-onboarding', 'message-coaching', 'reply-coaching', 'review-items'],
+          capabilities: [
+            'long-connection',
+            'qr-onboarding',
+            'message-coaching',
+            'reply-coaching',
+            'review-items',
+            'daily-review-delivery',
+          ],
         },
         {
           id: 'wechat',
@@ -1280,7 +1292,14 @@ describe('runCli', () => {
         id: 'feishu',
         label: 'Feishu/Lark',
         status: 'supported',
-        capabilities: ['long-connection', 'qr-onboarding', 'message-coaching', 'reply-coaching', 'review-items'],
+        capabilities: [
+          'long-connection',
+          'qr-onboarding',
+          'message-coaching',
+          'reply-coaching',
+          'review-items',
+          'daily-review-delivery',
+        ],
       },
       policy: 'environment',
       storage: 'process-env',
@@ -1343,8 +1362,8 @@ describe('runCli', () => {
         status: 'supported',
       },
       delivery: {
-        supported: false,
-        mode: 'payload-only',
+        supported: true,
+        mode: 'message',
       },
       pack: {
         date: item.nextReviewAt,
@@ -1380,8 +1399,8 @@ describe('runCli', () => {
       requiresCredentials: ['FEISHU_APP_ID', 'FEISHU_APP_SECRET', 'FEISHU_ALLOWED_OPEN_IDS'],
       payload: {
         delivery: {
-          supported: false,
-          mode: 'payload-only',
+          supported: true,
+          mode: 'message',
         },
         pack: {
           date: item.nextReviewAt,
@@ -1390,6 +1409,70 @@ describe('runCli', () => {
         },
       },
     });
+  });
+
+  it('delivers compact Feishu daily review chunks through tmux-claude-bot notify', async () => {
+    const fakeBin = join(home, 'fake-bin');
+    const argsLog = join(home, 'tcb-args.log');
+    const bodyLog = join(home, 'tcb-body.log');
+    const previousPath = process.env.PATH;
+    mkdirSync(fakeBin, { recursive: true });
+    writeExecutable(
+      join(fakeBin, 'tcb'),
+      [
+        '#!/bin/sh',
+        'printf "%s\\n" "$*" >> "$TCB_ARGS_LOG"',
+        'cat >> "$TCB_BODY_LOG"',
+        'printf "\\n---MESSAGE---\\n" >> "$TCB_BODY_LOG"',
+        'printf \'{"status":"sent","deliveries":[{"channel":"lark","ok":true}]}\\n\'',
+        '',
+      ].join('\n'),
+    );
+    process.env.PATH = `${fakeBin}:${process.env.PATH ?? ''}`;
+
+    try {
+      runCli([
+        'coach',
+        '--text',
+        '这个 threshold 后续支持调整强度, and the workflow should feel sophisticated.',
+        '--record',
+        '--json',
+      ]);
+      const [item] = JSON.parse(runCli(['review', '--json']).stdout);
+      const result = await runCliAsync(
+        ['integrations', 'deliver', '--target', 'feishu', '--date', item.nextReviewAt, '--json'],
+        '',
+        {
+          env: {
+            ...process.env,
+            TCB_ARGS_LOG: argsLog,
+            TCB_BODY_LOG: bodyLog,
+          },
+        },
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toBe('');
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        operation: 'feishu-daily-review-delivery',
+        target: 'feishu',
+        delivered: true,
+        network: true,
+        messagesSent: 1,
+        session: expect.stringContaining('tmux_proj_'),
+      });
+      expect(readFileSync(argsLog, 'utf8')).toContain('notify --channel lark --session');
+      expect(readFileSync(argsLog, 'utf8')).toContain('--source english-pilot');
+      const body = readFileSync(bodyLog, 'utf8');
+      expect(body).toContain('EnglishPilot Daily Review');
+      expect(body).toContain('Due: 1 | Selected: 1');
+      expect(body).toContain('Original:');
+      expect(body).not.toContain('Review prompt');
+      expect(body).not.toContain('Next review');
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+    }
   });
 
   it('builds a channel-neutral message coaching payload for supported message integrations', () => {
@@ -1459,6 +1542,123 @@ describe('runCli', () => {
         tags: expect.arrayContaining(['integration-message', 'feishu']),
       }),
     ]);
+  });
+
+  it('coaches a WeChat event JSON payload and records the lesson when requested', () => {
+    const result = runCli([
+      'integrations',
+      'event-coaching',
+      '--target',
+      'wechat',
+      '--event-json',
+      JSON.stringify({
+        Content: '我想创建一个 new project，用来辅助英语学习。',
+        MsgId: 'wx_msg_1',
+        FromUserName: 'wx_user_1',
+      }),
+      '--record',
+      '--json',
+    ]);
+    const review = runCli(['review', '--json']);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      event: {
+        text: '我想创建一个 new project，用来辅助英语学习。',
+        messageId: 'wx_msg_1',
+        senderId: 'wx_user_1',
+      },
+      coaching: {
+        target: { id: 'wechat', status: 'supported' },
+        message: {
+          analysis: { decision: 'BLOCK' },
+          rewrite: expect.stringContaining('create a new project'),
+          shouldRecord: true,
+        },
+      },
+      recorded: true,
+      item: {
+        suggested: expect.stringContaining('create a new project'),
+        tags: expect.arrayContaining(['integration-message', 'wechat']),
+      },
+    });
+    expect(JSON.parse(review.stdout)).toEqual([
+      expect.objectContaining({
+        original: '我想创建一个 new project，用来辅助英语学习。',
+        tags: expect.arrayContaining(['integration-message', 'wechat']),
+      }),
+    ]);
+  });
+
+  it('reports invalid integration event JSON without recording review state', () => {
+    const result = runCli([
+      'integrations',
+      'event-coaching',
+      '--target',
+      'wechat',
+      '--event-json',
+      '{not json',
+      '--record',
+      '--json',
+    ]);
+
+    expect(result).toEqual({
+      exitCode: 1,
+      stdout: '',
+      stderr: 'Invalid integration event JSON.\n',
+    });
+    expect(JSON.parse(runCli(['review', '--json']).stdout)).toEqual([]);
+  });
+
+  it('lists and filters integration validation history from local state', () => {
+    writeFileSync(
+      join(home, 'integration-validations.jsonl'),
+      [
+        JSON.stringify({
+          id: 'validation_wechat_20260811000000_abc123',
+          createdAt: '2026-08-11T00:00:00.000Z',
+          operation: 'account-validation',
+          target: { id: 'wechat', label: 'WeChat', status: 'supported' },
+          validated: true,
+          send: true,
+          network: true,
+          stages: [],
+          blockers: [],
+          deliveryTargetApi: 'wechat-long-connection',
+        }),
+        JSON.stringify({
+          id: 'validation_feishu_20260811010000_def456',
+          createdAt: '2026-08-11T01:00:00.000Z',
+          operation: 'account-validation',
+          target: { id: 'feishu', label: 'Feishu/Lark', status: 'supported' },
+          validated: false,
+          send: false,
+          network: false,
+          stages: [],
+          blockers: ['Pass --send to perform account validation network delivery.'],
+        }),
+      ].join('\n') + '\n',
+      'utf8',
+    );
+
+    const json = runCli(['integrations', 'validation-history', '--target', 'wechat', '--json']);
+    const human = runCli(['integrations', 'validation-history']);
+
+    expect(json.exitCode).toBe(0);
+    expect(json.stderr).toBe('');
+    expect(JSON.parse(json.stdout)).toMatchObject({
+      records: [
+        {
+          id: 'validation_wechat_20260811000000_abc123',
+          target: { id: 'wechat' },
+          validated: true,
+        },
+      ],
+    });
+    expect(human.stdout).toContain('2026-08-11T00:00:00.000Z - WeChat: validated');
+    expect(human.stdout).toContain('target api: wechat-long-connection');
+    expect(human.stdout).toContain('2026-08-11T01:00:00.000Z - Feishu/Lark: not validated');
   });
 
   it('delivers a daily review pack to Obsidian Markdown files without network access', () => {
@@ -1577,7 +1777,14 @@ describe('runCli', () => {
           id: 'feishu',
           label: 'Feishu/Lark',
           status: 'supported',
-          capabilities: ['long-connection', 'qr-onboarding', 'message-coaching', 'reply-coaching', 'review-items'],
+          capabilities: [
+            'long-connection',
+            'qr-onboarding',
+            'message-coaching',
+            'reply-coaching',
+            'review-items',
+            'daily-review-delivery',
+          ],
         },
         ready: false,
         network: false,
@@ -2323,6 +2530,29 @@ describe('runCli', () => {
     }
   });
 
+  it('does not inherit an ancestor project opt-out across a nested Git repository', () => {
+    const ancestor = join(home, 'ancestor-disabled-project');
+    const projectRoot = join(ancestor, 'nested-project');
+    const nestedProjectDir = join(projectRoot, 'src');
+    mkdirSync(join(projectRoot, '.git'), { recursive: true });
+    mkdirSync(nestedProjectDir, { recursive: true });
+    writeFileSync(join(ancestor, '.english-pilot.json'), JSON.stringify({ gateHook: false }, null, 2), 'utf8');
+    const previousCwd = process.cwd();
+
+    try {
+      process.chdir(nestedProjectDir);
+      const result = runCli(
+        ['hook', 'codex', '--stdin'],
+        JSON.stringify({ prompt: '帮我实现这个项目里的功能，不要问太多' }),
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout)).toMatchObject({ decision: 'block' });
+    } finally {
+      process.chdir(previousCwd);
+    }
+  });
+
   it('disables the gate hook and adds the opt-out file to repo-local git excludes', () => {
     const projectRoot = join(home, 'repo-local-ignore-project');
     const nestedProjectDir = join(projectRoot, 'src');
@@ -2532,6 +2762,11 @@ function restoreEnv(values: Record<string, string | undefined>): void {
       process.env[key] = value;
     }
   }
+}
+
+function writeExecutable(path: string, content: string): void {
+  writeFileSync(path, content, 'utf8');
+  chmodSync(path, 0o755);
 }
 
 function jsonResponse(body: unknown) {

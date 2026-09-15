@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runCli } from '../../src/adapters/cli.js';
 import { handleMcpToolCall, handleMcpToolCallAsync, listMcpTools } from '../../src/adapters/mcp-server.js';
+import { createMcpServer } from '../../src/adapters/mcp-stdio.js';
 
 describe('MCP tools', () => {
   let previousHome: string | undefined;
@@ -86,6 +87,13 @@ describe('MCP tools', () => {
       'english_voice_practice_from_audio',
       'english_coaching_context',
     ]);
+  });
+
+  it('creates the stdio MCP server from the published tool registry', () => {
+    const server = createMcpServer();
+
+    expect(server.constructor.name).toBe('McpServer');
+    expect(server).toHaveProperty('connect', expect.any(Function));
   });
 
   it('analyzes text', () => {
@@ -979,7 +987,14 @@ describe('MCP tools', () => {
           id: 'feishu',
           label: 'Feishu/Lark',
           status: 'supported',
-          capabilities: ['long-connection', 'qr-onboarding', 'message-coaching', 'reply-coaching', 'review-items'],
+          capabilities: [
+            'long-connection',
+            'qr-onboarding',
+            'message-coaching',
+            'reply-coaching',
+            'review-items',
+            'daily-review-delivery',
+          ],
         },
         {
           id: 'wechat',
@@ -1022,8 +1037,8 @@ describe('MCP tools', () => {
         status: 'supported',
       },
       delivery: {
-        supported: false,
-        mode: 'payload-only',
+        supported: true,
+        mode: 'message',
       },
       pack: {
         date: reviewDate,
@@ -1100,7 +1115,14 @@ describe('MCP tools', () => {
         id: 'feishu',
         label: 'Feishu/Lark',
         status: 'supported',
-        capabilities: ['long-connection', 'qr-onboarding', 'message-coaching', 'reply-coaching', 'review-items'],
+        capabilities: [
+          'long-connection',
+          'qr-onboarding',
+          'message-coaching',
+          'reply-coaching',
+          'review-items',
+          'daily-review-delivery',
+        ],
       },
       mode: 'long-connection-bot',
       status: 'supported',

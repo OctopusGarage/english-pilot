@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { getEnglishPilotHome } from '../core/config.js';
+import { ensureRuntimeLayout } from '../core/infra/state-dir.js';
 import {
   buildDailyReviewDeliveryDryRun,
   buildDailyReviewDeliveryPayload,
@@ -9,6 +10,7 @@ import {
 } from '../integrations/daily-review-delivery.js';
 import { deliverObsidianDailyReview, formatDailyReviewDelivery } from '../integrations/deliver.js';
 import { formatDailyReviewDryRun } from '../integrations/dry-run.js';
+import { deliverFeishuDailyReview } from '../integrations/feishu-daily-review-delivery.js';
 import { buildIntegrationAccountGuide, formatIntegrationAccountGuide } from '../integrations/account-guide.js';
 import { formatIntegrationAccountValidation } from '../integrations/account-validation.js';
 import {
@@ -37,7 +39,9 @@ import {
 import { listGlossaryEntries } from '../core/glossary.js';
 import { isDateKey } from '../core/review-schedule.js';
 import { listLearningItems, recordLearningItem } from '../storage/repository.js';
+import { createControlClient } from './control/client.js';
 import type { CliAsyncOptions, CliResult } from './cli-types.js';
+import type { WeChatDailyReviewDaemonDeliveryResult } from './control/protocol.js';
 
 export function runIntegrations(args: string[]): CliResult {
   const [subcommand] = args;
@@ -289,6 +293,7 @@ export function runIntegrations(args: string[]): CliResult {
       '  english-pilot integrations message-coaching --target <target> --text "..." [--record] [--json]',
       '  english-pilot integrations event-coaching --target wechat --event-json <json> [--record] [--json]',
       '  english-pilot integrations deliver --target obsidian [--date YYYY-MM-DD] [--dir <path>] [--write] [--json]',
+      '  english-pilot integrations deliver --target feishu|wechat [--date YYYY-MM-DD] [--json]',
       '',
     ].join('\n'),
   };
@@ -382,6 +387,82 @@ export async function runIntegrationSend(args: string[], options: CliAsyncOption
       stderr: `${error instanceof Error ? error.message : String(error)}\n`,
     };
   }
+}
+
+export async function runIntegrationDeliver(args: string[], options: CliAsyncOptions = {}): Promise<CliResult> {
+  const target = findIntegrationTarget(getFlagValue(args, '--target'));
+  const date = getFlagValue(args, '--date') ?? new Date().toISOString().slice(0, 10);
+  if (!target || !['wechat', 'feishu'].includes(target.id) || !isDateKey(date)) {
+    return usage('english-pilot integrations deliver --target feishu|wechat [--date YYYY-MM-DD] [--json]');
+  }
+
+  if (target.id === 'feishu') {
+    const result = await deliverFeishuDailyReview({
+      date,
+      items: listLearningItems(),
+      env: options.env,
+    });
+    return {
+      exitCode: result.delivered ? 0 : 1,
+      stdout: args.includes('--json')
+        ? `${JSON.stringify(result, null, 2)}\n`
+        : formatFeishuDailyReviewDelivery(result),
+      stderr: '',
+    };
+  }
+
+  const payload = buildDailyReviewDeliveryPayload({ target, date, items: listLearningItems() });
+  try {
+    const result = await createControlClient(ensureRuntimeLayout().controlSocketPath).deliverWeChatDailyReview(payload);
+    return {
+      exitCode: result.delivered ? 0 : 1,
+      stdout: args.includes('--json') ? `${JSON.stringify(result, null, 2)}\n` : formatWeChatDaemonDelivery(result),
+      stderr: '',
+    };
+  } catch (error) {
+    const result: WeChatDailyReviewDaemonDeliveryResult = {
+      operation: 'wechat-daily-review-daemon-delivery',
+      delivered: false,
+      network: false,
+      accountCount: 0,
+      recipientCount: 0,
+      messagePreview: payload.pack.markdown.replace(/\s+/g, ' ').trim().slice(0, 240),
+      blocker: `EnglishPilot daemon is not reachable through the local control socket: ${
+        error instanceof Error ? error.message : String(error)
+      }. Start an already configured daemon with \`english-pilot run\` or the managed service.`,
+    };
+    return {
+      exitCode: 1,
+      stdout: args.includes('--json') ? `${JSON.stringify(result, null, 2)}\n` : formatWeChatDaemonDelivery(result),
+      stderr: '',
+    };
+  }
+}
+
+function formatFeishuDailyReviewDelivery(result: Awaited<ReturnType<typeof deliverFeishuDailyReview>>): string {
+  return [
+    'Feishu daily review delivery',
+    `Delivered: ${result.delivered ? 'yes' : 'no'}`,
+    `Network: ${result.network ? 'yes, through tmux-claude-bot notify' : 'no'}`,
+    `Messages: ${result.messagesSent}/${result.messageCount}`,
+    `Session: ${result.session}`,
+    `Preview: ${result.messagePreview}`,
+    ...(result.blocker ? [`Blocker: ${result.blocker}`] : []),
+    ...(result.errors?.length ? ['Errors:', ...result.errors.map((error) => `- ${error}`)] : []),
+    '',
+  ].join('\n');
+}
+
+function formatWeChatDaemonDelivery(result: WeChatDailyReviewDaemonDeliveryResult): string {
+  return [
+    'WeChat daily review daemon delivery',
+    `Delivered: ${result.delivered ? 'yes' : 'no'}`,
+    `Network: ${result.network ? 'yes, through the daemon-owned long connection' : 'no'}`,
+    `Accounts: ${result.accountCount}`,
+    `Recipients: ${result.recipientCount}`,
+    ...(result.blocker ? [`Blocker: ${result.blocker}`] : []),
+    '',
+  ].join('\n');
 }
 
 function formatIntegrationNetworkDelivery(result: IntegrationNetworkDeliveryResult): string {

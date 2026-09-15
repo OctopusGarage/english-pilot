@@ -47,11 +47,11 @@ if [ "$mode" = "deploy" ]; then
   local_tmp="$(mktemp -d)"
   cd "$repo_root"
 
-  npm run build
-  artifact_name="$(npm pack --pack-destination "$local_tmp" --silent | tail -n 1)"
+  pnpm run build
+  artifact_name="$(pnpm pack --pack-destination "$local_tmp" --silent | tail -n 1)"
   local_artifact="$local_tmp/$artifact_name"
   [ -f "$local_artifact" ] || {
-    echo "npm pack did not create the expected artifact: $local_artifact" >&2
+    echo "pnpm pack did not create the expected artifact: $local_artifact" >&2
     exit 1
   }
 
@@ -94,19 +94,19 @@ find_node_tools() {
     export PATH
   fi
 
-  if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
+  if command -v node >/dev/null 2>&1 && command -v pnpm >/dev/null 2>&1; then
     return 0
   fi
 
-  for bin in "$HOME"/.nvm/versions/node/*/bin "$HOME"/.local/share/fnm/node-versions/*/installation/bin /opt/homebrew/bin /usr/local/bin; do
-    if [ -x "$bin/node" ] && [ -x "$bin/npm" ]; then
+  for bin in "$HOME"/.nvm/versions/node/*/bin "$HOME"/.local/share/fnm/node-versions/*/installation/bin "$HOME"/.local/share/pnpm /opt/homebrew/bin /usr/local/bin; do
+    if [ -x "$bin/node" ] && [ -x "$bin/pnpm" ]; then
       PATH="$bin:$PATH"
       export PATH
       return 0
     fi
   done
 
-  echo "Cannot find node and npm on remote host." >&2
+  echo "Cannot find node and pnpm on remote host." >&2
   exit 127
 }
 
@@ -120,7 +120,7 @@ load_service_env() {
 }
 
 installed_version() {
-  root="$(npm root -g)"
+  root="$(pnpm root -g)"
   node -e 'const fs=require("node:fs"); const p=process.argv[1]; try { console.log(JSON.parse(fs.readFileSync(p,"utf8")).version); } catch { console.log("not-installed"); }' "$root/$PACKAGE/package.json"
 }
 
@@ -233,7 +233,7 @@ print_section remote
 echo "remote_host=$(hostname)"
 echo "remote_user=$(whoami)"
 echo "node_version=$(node -v)"
-echo "npm_version=$(npm -v)"
+echo "pnpm_version=$(pnpm -v)"
 
 print_section installed
 echo "installed_version=$(installed_version)"
@@ -251,7 +251,7 @@ fi
 
 before_version="$(installed_version)"
 print_section install
-npm install -g "$EP_ARTIFACT"
+pnpm add -g "$EP_ARTIFACT"
 after_version="$(installed_version)"
 echo "version_before=$before_version"
 echo "version_after=$after_version"

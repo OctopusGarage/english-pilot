@@ -5,6 +5,14 @@ import { parse } from 'yaml';
 
 const root = join(__dirname, '..');
 
+type PackageManifest = {
+  devDependencies: Record<string, string>;
+};
+
+type PnpmLock = {
+  snapshots: Record<string, unknown>;
+};
+
 type Workflow = {
   on: {
     pull_request_target: {
@@ -29,6 +37,20 @@ const readWorkflow = (): Workflow =>
   parse(readFileSync(join(root, '.github/workflows/dependabot-auto-merge.yml'), 'utf8')) as Workflow;
 
 describe('Dependabot auto-merge workflow', () => {
+  it('declares the YAML parser used by workflow tests', () => {
+    const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as PackageManifest;
+
+    expect(manifest.devDependencies.yaml).toBe('^2.9.0');
+  });
+
+  it('locks the MCP SDK at the audited safe release', () => {
+    const lockfile = parse(readFileSync(join(root, 'pnpm-lock.yaml'), 'utf8')) as PnpmLock;
+
+    expect(Object.keys(lockfile.snapshots).some((key) => key.startsWith('@modelcontextprotocol/sdk@1.30.0'))).toBe(
+      true,
+    );
+  });
+
   it('handles Dependabot pull-request lifecycle events and identities', () => {
     const workflow = readWorkflow();
     const job = workflow.jobs['auto-merge'];

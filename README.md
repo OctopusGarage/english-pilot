@@ -85,7 +85,7 @@ The goal is not to replace English study time. It makes normal work conversation
 - **Claude Code and Codex installers** — installs hooks, MCP config, and host guidance.
 - **MCP tool surface** — exposes analysis, rewrite, review, config, roadmap, integration, voice, and diagnostic tools.
 - **Feishu/Lark long connection** — QR-assisted setup, allowlist, threshold checks, `/new`, voice-to-text handoff, and local agent replies.
-- **WeChat long connection** — QR-login account storage, allowlist, reconnect/session refresh handling, `/new`, and local agent replies.
+- **WeChat long connection** — QR-login account storage, allowlist, reconnect/session refresh handling, `/new`, local agent replies, and daemon-mediated daily review delivery.
 - **Managed daemon** — one launchd/systemd service owns external channels, logs, instance locking, and a local control socket.
 - **Quality gates** — CI on Ubuntu/macOS, project-health workflow, full-history gitleaks, CodeQL, coverage artifact, pre-commit and pre-push hooks.
 
@@ -153,10 +153,10 @@ curl -fsSL https://raw.githubusercontent.com/OctopusGarage/english-pilot/main/in
   ENGLISH_PILOT_VERSION=vX.Y.Z bash
 ```
 
-Or use npm after the package is published:
+Or use pnpm after the package is published to the npm registry:
 
 ```bash
-npm install -g @octopusgarage/english-pilot
+pnpm add -g @octopusgarage/english-pilot
 english-pilot setup --yes
 ```
 
@@ -202,8 +202,8 @@ Run a quick local behavior check:
 
 ```bash
 english-pilot eval smoke --json
-npm run smoke:mcp-stdio
-npm run eval:suite
+pnpm run smoke:mcp-stdio
+pnpm run eval:suite
 ```
 
 See [Eval and Quality Gates](docs/eval-and-quality.md) for smoke coverage,
@@ -248,7 +248,7 @@ english-pilot wechat doctor --json
 english-pilot run
 ```
 
-WeChat uses QR-login long connection state under `~/.english-pilot/wechat/accounts/`. The channel runtime handles reconnect/session refresh and uses `/new` to clear the active local agent thread. Feishu and WeChat send `Received. Working on it...` before long Claude/Codex turns; set `WECHAT_PROCESSING_ACK=off` or `FEISHU_PROCESSING_ACK=off` to disable it.
+WeChat uses QR-login long connection state under `~/.english-pilot/wechat/accounts/`. The channel runtime handles reconnect/session refresh and uses `/new` to clear the active local agent thread. Feishu and WeChat send `Received. Working on it...` before long Claude/Codex turns; set `WECHAT_PROCESSING_ACK=off` or `FEISHU_PROCESSING_ACK=off` to disable it. Daily review delivery uses `english-pilot integrations deliver --target wechat` and requires an already-running daemon; direct HTTP/request-preview sending remains blocked.
 
 ### Managed Service
 
@@ -321,15 +321,15 @@ Eval details are documented in [Eval and Quality Gates](docs/eval-and-quality.md
 ## Development
 
 ```bash
-npm ci
-npm run lint
-npm run typecheck
-npm test
-npm run smoke
-npm run smoke:mcp-stdio
-npm run eval:suite
-npm run project-health
-npm run verify
+pnpm install --frozen-lockfile
+pnpm run lint
+pnpm run typecheck
+pnpm test
+pnpm run smoke
+pnpm run smoke:mcp-stdio
+pnpm run eval:suite
+pnpm run project-health
+pnpm run verify
 ```
 
 Use [Eval and Quality Gates](docs/eval-and-quality.md) for the detailed

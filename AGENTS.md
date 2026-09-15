@@ -11,17 +11,17 @@ local eval, run the deterministic smoke suite instead of inventing a manual
 check:
 
 ```bash
-npm run build && npm run smoke:json
-npm run smoke:mcp-stdio
+pnpm run build && pnpm run smoke:json
+pnpm run smoke:mcp-stdio
 ```
 
 Read the JSON and report the overall `passed` value plus each case id. If a case
 fails, run the narrow related test before inspecting code:
 
-- Gate/coaching: `npm test -- --run tests/eval/smoke-eval.test.ts tests/unit/analyze.test.ts tests/integration/coaching.test.ts`
-- Feishu/WeChat channel coaching: `npm test -- --run tests/eval/smoke-eval.test.ts tests/integration/feishu-channel.test.ts tests/integration/wechat-channel.test.ts`
-- Agent dry-run: `npm test -- --run tests/eval/smoke-eval.test.ts tests/integration/agent-runner.test.ts`
-- MCP stdio: `npm run build && npm run smoke:mcp-stdio`
+- Gate/coaching: `pnpm test -- --run tests/eval/smoke-eval.test.ts tests/unit/analyze.test.ts tests/integration/coaching.test.ts`
+- Feishu/WeChat channel coaching: `pnpm test -- --run tests/eval/smoke-eval.test.ts tests/integration/feishu-channel.test.ts tests/integration/wechat-channel.test.ts`
+- Agent dry-run: `pnpm test -- --run tests/eval/smoke-eval.test.ts tests/integration/agent-runner.test.ts`
+- MCP stdio: `pnpm run build && pnpm run smoke:mcp-stdio`
 
 For prompt fixtures that can be pasted into Claude or Codex, run:
 
@@ -36,7 +36,7 @@ When the user asks for `/agent-eval`, `AI eval`, or to verify that Claude/Codex
 actually follows the English note instruction, run the opt-in agent eval:
 
 ```bash
-npm run build
+pnpm run build
 node dist/src/bin/english-pilot.js eval agent --backend codex --case channel-weather --json
 ```
 

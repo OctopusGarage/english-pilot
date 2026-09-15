@@ -76,7 +76,7 @@ export interface DoctorExport {
   path: string;
 }
 
-export function doctor(): DoctorReport {
+export function doctor(input: { daemon?: DoctorReport['daemon'] } = {}): DoctorReport {
   const home = getEnglishPilotHome();
   const configPath = getConfigPath();
   const report: DoctorReport = {
@@ -84,7 +84,7 @@ export function doctor(): DoctorReport {
     home,
     config: { ok: true, path: configPath },
     storage: { ok: true, path: home },
-    daemon: inspectDaemon(),
+    daemon: input.daemon ?? inspectDaemon(),
     rewrite: { backend: 'off', ready: true },
     claude: inspectClaudeInstall(resolveInstallHome()),
     codex: inspectCodexInstall(resolveInstallHome()),
@@ -270,6 +270,12 @@ function parseStringConfigValue<K extends keyof EnglishPilotConfig>(key: K, valu
   if (key === 'ratioProgression') {
     return parseOneOf(key, value, ['manual', 'scheduled']) as EnglishPilotConfig[K];
   }
+  if (key === 'assistantEnglishNoteStyle') {
+    return parseOneOf(key, value, ['general', 'software-engineering']) as EnglishPilotConfig[K];
+  }
+  if (key === 'assistantEnglishNoteDepth') {
+    return parseOneOf(key, value, ['compact', 'rich', 'lesson']) as EnglishPilotConfig[K];
+  }
   if (key === 'storage') return parseOneOf(key, value, ['sqlite', 'jsonl']) as EnglishPilotConfig[K];
   if (key === 'rewriteBackend') return parseOneOf(key, value, ['off', 'argos']) as EnglishPilotConfig[K];
   if (key === 'externalAgentBackend')
@@ -302,10 +308,13 @@ function validateConfig(config: EnglishPilotConfig): EnglishPilotConfig {
     'workspace-write',
     'danger-full-access',
   ]);
+  validateOneOf('assistantEnglishNoteStyle', config.assistantEnglishNoteStyle, ['general', 'software-engineering']);
+  validateOneOf('assistantEnglishNoteDepth', config.assistantEnglishNoteDepth, ['compact', 'rich', 'lesson']);
   validateBoolean('preferEnglishLeading', config.preferEnglishLeading);
   validateBoolean('ignoreCodePathsUrls', config.ignoreCodePathsUrls);
   validateBoolean('blockWithRewrite', config.blockWithRewrite);
   validateBoolean('recordAllowedPrompts', config.recordAllowedPrompts);
+  validateStringArray('assistantEnglishNoteReferencePaths', config.assistantEnglishNoteReferencePaths);
   validateStringArray('disabledProjectPaths', config.disabledProjectPaths);
   validateNonNegativeInteger('ignoreShortCjkFragmentsUnder', config.ignoreShortCjkFragmentsUnder);
   validateNonNegativeInteger('coachingCooldownMinutes', config.coachingCooldownMinutes);

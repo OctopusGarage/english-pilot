@@ -11,8 +11,8 @@ describe('project agent commands', () => {
     expect(existsSync(commandPath)).toBe(true);
     const command = readFileSync(commandPath, 'utf8');
     expect(command).toContain('description: Run EnglishPilot deterministic smoke eval');
-    expect(command).toContain('npm run build');
-    expect(command).toContain('npm run smoke:json');
+    expect(command).toContain('pnpm run build');
+    expect(command).toContain('pnpm run smoke:json');
     expect(command).toContain('eval prompts');
   });
 
@@ -33,7 +33,7 @@ describe('project agent commands', () => {
     expect(existsSync(commandPath)).toBe(true);
     expect(existsSync(scriptPath)).toBe(true);
     const command = readFileSync(commandPath, 'utf8');
-    expect(command).toContain('description: Update a remote EnglishPilot npm installation over SSH');
+    expect(command).toContain('description: Update a remote EnglishPilot installation over SSH');
     expect(command).toContain('scripts/update-remote-install.sh <user@host> <version>');
     expect(command).toContain('ys-aquria@mac2015.local');
     expect(command).toContain('ys-aquria@mac2015.local latest');
@@ -52,8 +52,8 @@ describe('project agent commands', () => {
     expect(command).toContain('description: Deploy the current EnglishPilot checkout to mac2015');
     expect(command).toContain('scripts/deploy-mac2015.sh deploy');
     expect(script).toContain('ENGLISH_PILOT_REMOTE:-ys-aquria@mac2015.local');
-    expect(script).toContain('npm pack');
-    expect(script).toContain('npm install -g');
+    expect(script).toContain('pnpm pack');
+    expect(script).toContain('pnpm add -g');
     expect(script).toContain('manual-daemon.log');
     expect(script).toContain('deployment_mode=');
     expect(script).toContain('verified_pid=');
@@ -68,7 +68,7 @@ describe('project agent commands', () => {
     expect(agents).toContain('/smoke-eval');
     expect(agents).toContain('/agent-eval');
     expect(agents).toContain('/update-remote-install');
-    expect(agents).toContain('npm run build && npm run smoke:json');
+    expect(agents).toContain('pnpm run build && pnpm run smoke:json');
     expect(agents).toContain('node dist/src/bin/english-pilot.js eval prompts');
     expect(agents).toContain('node dist/src/bin/english-pilot.js eval agent --backend codex');
   });

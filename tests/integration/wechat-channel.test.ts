@@ -1,12 +1,20 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runCli } from '../../src/adapters/cli.js';
+import { getWeChatUpdates, sendWeChatMessage } from '../../src/channels/wechat/api.js';
 import { loadWeChatChannelConfig } from '../../src/channels/wechat/config.js';
 import { monitorWeChatTextMessage } from '../../src/channels/wechat/monitor.js';
+import { runWeChatOnboarding } from '../../src/channels/wechat/onboarding.js';
 import { handleWeChatMessage, monitorWeChatAccount } from '../../src/channels/wechat/start.js';
-import { saveWeChatAccount } from '../../src/channels/wechat/state.js';
+import {
+  getWeChatAccountsDir,
+  listWeChatAccounts,
+  loadWeChatSyncCursor,
+  saveWeChatAccount,
+} from '../../src/channels/wechat/state.js';
+import { runWeChatUpdateStream } from '../../src/channels/wechat/update-stream.js';
 import { listLearningItems, listPromptEvents } from '../../src/storage/repository.js';
 
 describe('WeChat long-connection channel', () => {
@@ -26,6 +34,45 @@ describe('WeChat long-connection channel', () => {
       process.env.ENGLISH_PILOT_HOME = previousHome;
     }
     rmSync(home, { recursive: true, force: true });
+  });
+
+  it('enforces the long-poll timeout when the daemon supplies an abort signal', async () => {
+    const daemonAbort = new AbortController();
+    let requestSignal: AbortSignal | undefined;
+    const pending = getWeChatUpdates({
+      baseUrl: 'https://ilinkai.weixin.qq.com',
+      syncCursor: 'cursor-1',
+      timeoutMs: 1,
+      abortSignal: daemonAbort.signal,
+      fetch: async (_url, init) => {
+        requestSignal = init?.signal ?? undefined;
+        return await new Promise<Response>((_resolve, reject) => {
+          requestSignal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), {
+            once: true,
+          });
+        });
+      },
+    });
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(requestSignal?.aborted).toBe(true);
+    } finally {
+      daemonAbort.abort();
+      await pending;
+    }
+  });
+
+  it('treats non-zero WeChat send errcode responses as delivery failures', async () => {
+    await expect(
+      sendWeChatMessage({
+        baseUrl: 'https://ilinkai.weixin.qq.com',
+        token: 'secret-token',
+        to: 'wxid_owner@im.wechat',
+        text: 'Reply',
+        fetch: async () => jsonResponse({ errcode: 40001, errmsg: 'invalid credential' }),
+      }),
+    ).rejects.toThrow('WeChat sendmessage failed: errcode=40001 invalid credential');
   });
 
   it('loads local QR-login accounts and supports dry-run doctor output', () => {
@@ -54,6 +101,94 @@ describe('WeChat long-connection channel', () => {
       wouldConnect: false,
       accountCount: 1,
     });
+  });
+
+  it('stores QR-login accounts with private file permissions after redirect confirmation', async () => {
+    const logs: string[] = [];
+    const calls: string[] = [];
+    const result = await runWeChatOnboarding({
+      timeoutMs: 1000,
+      pollIntervalMs: 0,
+      log: (line) => logs.push(line),
+      fetch: async (url) => {
+        calls.push(String(url));
+        if (String(url).includes('get_bot_qrcode')) {
+          return jsonResponse({
+            qrcode: 'qr-token',
+            qrcode_img_content: 'https://wechat.example.test/qr',
+          });
+        }
+        if (calls.length === 2) {
+          return jsonResponse({ status: 'scaned_but_redirect', redirect_host: 'redirect.wechat.example.test' });
+        }
+        return jsonResponse({
+          status: 'confirmed',
+          ilink_bot_id: 'bot@im.wechat',
+          bot_token: 'secret-token',
+          ilink_user_id: 'wxid_owner@im.wechat',
+        });
+      },
+    });
+
+    expect(result).toMatchObject({
+      connected: true,
+      message: 'Connected WeChat account bot-im-wechat.',
+      account: {
+        accountId: 'bot-im-wechat',
+        token: 'secret-token',
+        baseUrl: 'https://redirect.wechat.example.test',
+        userId: 'wxid_owner@im.wechat',
+      },
+    });
+    expect(calls[1]).toContain('https://ilinkai.weixin.qq.com/ilink/bot/get_qrcode_status');
+    expect(calls[2]).toContain('https://redirect.wechat.example.test/ilink/bot/get_qrcode_status');
+    expect(logs).toContain('Scan this QR code with WeChat to connect EnglishPilot:');
+    expect(listWeChatAccounts()).toHaveLength(1);
+    expect(statSync(join(getWeChatAccountsDir(), 'bot-im-wechat.json')).mode & 0o077).toBe(0);
+  });
+
+  it('skips malformed saved account files when loading WeChat channel readiness', () => {
+    const accountsDir = getWeChatAccountsDir();
+    mkdirSync(accountsDir, { recursive: true });
+    writeFileSync(join(home, 'wechat', 'accounts.json'), JSON.stringify(['broken-account', 'bot-im-bot']), 'utf8');
+    writeFileSync(join(accountsDir, 'broken-account.json'), '{not json}\n', 'utf8');
+    saveWeChatAccount({
+      accountId: 'bot-im-bot',
+      token: 'secret-token',
+      baseUrl: 'https://ilinkai.weixin.qq.com',
+      userId: 'wxid_owner@im.wechat',
+    });
+
+    const dryRun = runCli(['wechat', 'start', '--dry-run', '--json']);
+
+    expect(dryRun.exitCode).toBe(0);
+    expect(dryRun.stderr).toBe('');
+    expect(JSON.parse(dryRun.stdout)).toMatchObject({
+      ready: true,
+      accountCount: 1,
+      allowedUsers: 1,
+    });
+  });
+
+  it('fails QR onboarding before polling when the QR API omits the QR code', async () => {
+    const calls: string[] = [];
+
+    const result = await runWeChatOnboarding({
+      timeoutMs: 1,
+      pollIntervalMs: 0,
+      log: () => undefined,
+      fetch: async (url) => {
+        calls.push(String(url));
+        return jsonResponse({});
+      },
+    });
+
+    expect(result).toEqual({
+      connected: false,
+      message: 'WeChat QR login did not return a QR code.',
+    });
+    expect(calls).toHaveLength(1);
+    expect(listWeChatAccounts()).toEqual([]);
   });
 
   it('records blocked WeChat direct messages and prepares a copyable reply', () => {
@@ -187,6 +322,34 @@ describe('WeChat long-connection channel', () => {
     expect(sent).toEqual(['Received. Working on it...', 'Here is a concise reply.']);
   });
 
+  it('sends WeChat group replies back to the room instead of direct messaging the sender', async () => {
+    runCli(['config', 'set', 'externalAgentBackend', 'codex']);
+    const recipients: string[] = [];
+    const account = accountFixture();
+
+    const result = await handleWeChatMessage({
+      account,
+      config: {
+        accounts: [account],
+        allowedUsers: new Set(['wxid_owner@im.wechat']),
+        replyMode: 'violation',
+        botAgent: 'EnglishPilot/0.1.0',
+      },
+      message: {
+        ...wechatTextMessage('Please summarize this group thread.'),
+        room_id: 'room-alpha@chatroom',
+      },
+      runAgent: async (options) => agentResult('codex', options.prompt, { threadId: 'group-thread' }),
+      sendText: async (input) => {
+        recipients.push(input.to);
+        return { sent: true };
+      },
+    });
+
+    expect(result).toMatchObject({ handled: true, replied: true });
+    expect(recipients).toEqual(['room-alpha@chatroom']);
+  });
+
   it('records the final English note from a WeChat agent reply', async () => {
     runCli(['config', 'set', 'externalAgentBackend', 'codex']);
     const account = accountFixture();
@@ -256,6 +419,50 @@ describe('WeChat long-connection channel', () => {
     });
 
     expect(threadIds).toEqual([undefined, 'codex-thread-wechat']);
+  });
+
+  it('clears a failed resumed Codex thread so the next message can recover', async () => {
+    runCli(['config', 'set', 'externalAgentBackend', 'codex']);
+    const threadIds: Array<string | undefined> = [];
+    const account = accountFixture();
+    const config = {
+      accounts: [account],
+      allowedUsers: new Set(['wxid_owner@im.wechat']),
+      replyMode: 'violation' as const,
+      botAgent: 'EnglishPilot/0.1.0',
+    };
+    let attempt = 0;
+
+    const run = (text: string) =>
+      handleWeChatMessage({
+        account,
+        config,
+        message: wechatTextMessage(text),
+        runAgent: async (options) => {
+          threadIds.push(options.threadId);
+          attempt += 1;
+          if (attempt === 2)
+            return {
+              ...agentResult('codex', options.prompt, { cwd: options.cwd }),
+              exitCode: 1,
+              stderr: 'thread expired',
+            };
+          return agentResult('codex', options.prompt, {
+            cwd: options.cwd,
+            threadId: 'codex-thread-wechat',
+            stdout: 'Recovered reply',
+          });
+        },
+        sendText: async () => ({ sent: true }),
+      });
+
+    await run('Start this WeChat context.');
+    const failed = await run('Continue the expired WeChat context.');
+    const recovered = await run('Try this WeChat message again.');
+
+    expect(failed).toMatchObject({ handled: true, replied: false, reason: 'agent-failed' });
+    expect(recovered).toMatchObject({ handled: true, replied: true });
+    expect(threadIds).toEqual([undefined, 'codex-thread-wechat', undefined]);
   });
 
   it('clears the active WeChat agent thread with /new', async () => {
@@ -407,6 +614,73 @@ describe('WeChat long-connection channel', () => {
 
     expect(delays).toEqual([3000, 6000, 12000, 24000, 48000]);
   });
+
+  it('retries non-zero WeChat getupdates errcode responses without advancing the cursor', async () => {
+    const account = accountFixture();
+    const cursors: string[] = [];
+    const delays: number[] = [];
+    let attempts = 0;
+
+    await monitorWeChatAccount({
+      account,
+      config: {
+        accounts: [account],
+        allowedUsers: new Set(['wxid_owner@im.wechat']),
+        replyMode: 'violation',
+        botAgent: 'EnglishPilot/0.1.0',
+      },
+      maxIterations: 2,
+      sleep: async (delayMs) => {
+        delays.push(delayMs);
+      },
+      getUpdates: async ({ syncCursor }) => {
+        attempts += 1;
+        cursors.push(syncCursor);
+        if (attempts === 1) {
+          return {
+            errcode: 40001,
+            errmsg: 'invalid credential',
+            msgs: [],
+            get_updates_buf: 'cursor-from-error',
+          };
+        }
+        return {
+          ret: 0,
+          msgs: [],
+          get_updates_buf: 'cursor-after-retry',
+        };
+      },
+      notifyStop: async () => {},
+    });
+
+    expect(cursors).toEqual(['', '']);
+    expect(delays).toEqual([3000]);
+    expect(loadWeChatSyncCursor(account.accountId)).toBe('cursor-after-retry');
+  });
+
+  it('advances the WeChat sync cursor only after async message handling completes', async () => {
+    const account = accountFixture();
+    const handled: string[] = [];
+
+    await runWeChatUpdateStream({
+      account,
+      botAgent: 'EnglishPilot/0.1.0',
+      maxIterations: 1,
+      getUpdates: async () => ({
+        ret: 0,
+        msgs: [wechatTextMessage('Please handle this before moving the cursor.')],
+        get_updates_buf: 'cursor-after-message',
+      }),
+      notifyStop: async () => {},
+      onMessage: async (message) => {
+        expect(loadWeChatSyncCursor(account.accountId)).toBe('');
+        handled.push(String(message.message_id));
+      },
+    });
+
+    expect(handled).toEqual(['msg-44']);
+    expect(loadWeChatSyncCursor(account.accountId)).toBe('cursor-after-message');
+  });
 });
 
 function accountFixture() {
@@ -450,4 +724,12 @@ function agentResult(
     stderr: '',
     ...ids,
   };
+}
+
+function jsonResponse(body: unknown): Response {
+  return {
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify(body),
+  } as Response;
 }

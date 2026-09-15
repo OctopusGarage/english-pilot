@@ -13,7 +13,7 @@ export interface WeChatUpdateStreamInput {
   notifyStop?: typeof notifyWeChatStop;
   sleep?: (ms: number) => Promise<void>;
   logger?: RuntimeLogger;
-  onMessage: (message: WeChatUpdateMessage) => void;
+  onMessage: (message: WeChatUpdateMessage) => void | Promise<void>;
 }
 
 export async function runWeChatUpdateStream(input: WeChatUpdateStreamInput): Promise<void> {
@@ -92,10 +92,10 @@ export async function runWeChatUpdateStream(input: WeChatUpdateStreamInput): Pro
         await wait(60_000);
         continue;
       }
-      if (updates.ret && updates.ret !== 0) {
+      if (isNonZeroStatus(updates.ret) || isNonZeroStatus(updates.errcode)) {
         const delayMs = reconnectDelayMs(1);
         input.log?.(
-          `WeChat getupdates failed for ${input.account.accountId} (ret=${updates.ret}, retry in ${Math.round(
+          `WeChat getupdates failed for ${input.account.accountId} (${formatStatus(updates)}, retry in ${Math.round(
             delayMs / 1000,
           )}s): ${updates.errmsg ?? 'unknown error'}`,
         );
@@ -112,17 +112,17 @@ export async function runWeChatUpdateStream(input: WeChatUpdateStreamInput): Pro
         timeoutMs = updates.longpolling_timeout_ms;
         logger?.debug('wechat.getupdates.timeout_updated', 'WeChat long polling timeout updated.', { timeoutMs });
       }
-      if (updates.get_updates_buf) {
-        cursor = updates.get_updates_buf;
-        saveWeChatSyncCursor(input.account.accountId, cursor);
-      }
       for (const message of updates.msgs ?? []) {
         logger?.info('wechat.message.received', 'WeChat message received from update stream.', {
           messageId: message.message_id,
           fromUserId: message.from_user_id,
           messageType: message.message_type,
         });
-        input.onMessage(message);
+        await input.onMessage(message);
+      }
+      if (updates.get_updates_buf) {
+        cursor = updates.get_updates_buf;
+        saveWeChatSyncCursor(input.account.accountId, cursor);
       }
     }
   } finally {
@@ -140,6 +140,14 @@ export async function runWeChatUpdateStream(input: WeChatUpdateStreamInput): Pro
       });
     }
   }
+}
+
+function isNonZeroStatus(value: number | undefined): boolean {
+  return value !== undefined && value !== 0;
+}
+
+function formatStatus(updates: { ret?: number; errcode?: number }): string {
+  return updates.ret !== undefined ? `ret=${updates.ret}` : `errcode=${updates.errcode}`;
 }
 
 function reconnectDelayMs(failures: number): number {

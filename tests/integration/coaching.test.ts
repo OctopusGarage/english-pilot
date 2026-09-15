@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runCli } from '../../src/adapters/cli.js';
+import { buildCoachingContext } from '../../src/core/coaching-context.js';
+import { defaultConfig } from '../../src/core/policy.js';
 
 describe('inline coaching policy', () => {
   let previousHome: string | undefined;
@@ -68,6 +70,56 @@ describe('inline coaching policy', () => {
         shouldOfferInlineCoaching: true,
       },
     });
+  });
+
+  it('adds software-engineering guidance to assistant-facing coaching context', () => {
+    runCli(['config', 'use', 'force']);
+
+    const result = runCli(['coach', 'context', '--json']);
+    const context = JSON.parse(result.stdout);
+
+    expect(result.exitCode).toBe(0);
+    expect(context).toMatchObject({
+      domainReference: {
+        style: 'software-engineering',
+        examples: expect.arrayContaining([
+          'append an English note at the end',
+          'make the failure path explicit',
+          'this change belongs at the module boundary',
+        ]),
+      },
+    });
+    expect(context.finalResponseInstruction).toContain('For programming-task conversations');
+    expect(context.finalResponseInstruction).toContain('software-engineering English');
+  });
+
+  it('uses rich assistant note guidance by default', () => {
+    const context = buildCoachingContext({
+      config: { ...defaultConfig, coachingIntensity: 'force' },
+      promptEvents: [],
+      now: new Date('2026-09-04T00:00:00.000Z'),
+    });
+
+    expect(context.finalResponseInstruction).toContain('Rich English Note');
+    expect(context.finalResponseInstruction).toContain('Useful patterns:');
+    expect(context.finalResponseInstruction).toContain('Collocations: startup issue');
+    expect(context.finalResponseInstruction).not.toContain('one concise note');
+    expect(context.finalResponseInstruction).not.toContain('compact');
+    expect(context.cadence).not.toContain('keep the note compact');
+    expect(context.policy.assistantEnglishNoteDepth).toBe('rich');
+  });
+
+  it('uses compact assistant note guidance when configured', () => {
+    const context = buildCoachingContext({
+      config: { ...defaultConfig, assistantEnglishNoteDepth: 'compact', coachingIntensity: 'force' },
+      promptEvents: [],
+      now: new Date('2026-09-04T00:00:00.000Z'),
+    });
+
+    expect(context.finalResponseInstruction).toContain('1-3 short lines');
+    expect(context.finalResponseInstruction).toContain('English note: "original phrase" -> "more natural English"');
+    expect(context.finalResponseInstruction).not.toContain('Useful patterns:');
+    expect(context.policy.assistantEnglishNoteDepth).toBe('compact');
   });
 
   it('suppresses coaching notes during the cooldown window', () => {

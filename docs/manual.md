@@ -26,10 +26,10 @@ Recommended packaged install or update:
 curl -fsSL https://raw.githubusercontent.com/OctopusGarage/english-pilot/main/install.sh | bash
 ```
 
-Npm install after publishing:
+Pnpm install after publishing to the npm registry:
 
 ```bash
-npm install -g @octopusgarage/english-pilot
+pnpm add -g @octopusgarage/english-pilot
 english-pilot setup --yes
 ```
 
@@ -38,13 +38,13 @@ Voice transcription setup is documented in [Voice STT Install](voice-stt-install
 ## Commands
 
 ```bash
-npm install
-npm run lint
-npm run typecheck
-npm run test:coverage
-npm run build
-npm test
-npm run project-health
+pnpm install --frozen-lockfile
+pnpm run lint
+pnpm run typecheck
+pnpm run test:coverage
+pnpm run build
+pnpm test
+pnpm run project-health
 node dist/src/bin/english-pilot.js check --text "I want to create a new project" --json
 node dist/src/bin/english-pilot.js hook claude --stdin
 node dist/src/bin/english-pilot.js hook codex --stdin
@@ -87,7 +87,7 @@ node scripts/smoke-mcp-stdio.mjs
 node dist/src/bin/english-pilot.js eval prompts
 node dist/src/bin/english-pilot.js eval agent --backend codex --case channel-weather --dry-run --json
 node dist/src/bin/english-pilot.js eval agent --backend codex --case history-lesson --dry-run --json
-npm run eval:suite
+pnpm run eval:suite
 node dist/src/bin/english-pilot.js review --json
 node dist/src/bin/english-pilot.js review due --json
 node dist/src/bin/english-pilot.js review upcoming --days 7 --json
@@ -226,15 +226,15 @@ node dist/src/bin/english-pilot.js service restart
 
 `run` starts one process that loads configured Feishu/Lark and WeChat channels, writes a running marker, holds an instance lock, and exposes a local Unix control socket at `~/.english-pilot/run/english-pilot.sock`. `daemon status` reads the running daemon through that socket when available and falls back to local marker inspection when it is stopped.
 
-`service install` registers the built `dist` daemon with launchd on macOS or a user systemd service on Linux. On macOS, `service install-dev` installs a launchd service that points at this checkout and runs a dev supervisor. The supervisor watches `src/`, runs `npm run build` after changes, reloads the daemon only after a clean build, and keeps the last-good daemon running when the build fails. The service command is explicit; installing hooks or MCP servers does not automatically register a background process.
+`service install` registers the built `dist` daemon with launchd on macOS or a user systemd service on Linux. On macOS, `service install-dev` installs a launchd service that points at this checkout and runs a dev supervisor. The supervisor watches `src/`, runs `pnpm run build` after changes, reloads the daemon only after a clean build, and keeps the last-good daemon running when the build fails. The service command is explicit; installing hooks or MCP servers does not automatically register a background process.
 
-Remote npm-installed machines can be updated through the reusable helper:
+Remote installations can be updated through the reusable helper:
 
 ```bash
 scripts/update-remote-install.sh <user@host> <version>
 ```
 
-The helper finds Node/npm on the remote host, runs `npm install -g @octopusgarage/english-pilot@<version>`, restarts the managed service, and prints service, WeChat, and voice preflight summaries. Claude Code also exposes this as `/update-remote-install`.
+The helper finds Node/pnpm on the remote host, runs `pnpm add -g @octopusgarage/english-pilot@<version>`, restarts the managed service, and prints service, WeChat, and voice preflight summaries. Claude Code also exposes this as `/update-remote-install`.
 
 Service runs can load environment variables from `~/.english-pilot/.env`. This is the recommended place for background-only values such as `WHISPER_COMMAND`, `CLOUD_STT_PROVIDER`, `CLOUD_STT_API_KEY`, `CLOUD_STT_ENDPOINT`, `WECHAT_PROCESSING_ACK`, and `FEISHU_PROCESSING_ACK`. The file uses shell syntax:
 
@@ -251,12 +251,12 @@ Restart the service after editing this file.
 Local commits use Husky pre-commit gates:
 
 - `lint-staged` lints/formats staged TS/JS files and formats staged JSON/Markdown/YAML files.
-- `npm run lint` blocks ESLint violations.
-- `npm run secrets:staged` blocks staged secrets with gitleaks.
-- `npm run typecheck` and `npm test` block broken TypeScript or tests.
-- `npm run portable-fixtures` blocks personal machine paths or local-only fixture names from entering source, docs, and tests.
+- `pnpm run lint` blocks ESLint violations.
+- `pnpm run secrets:staged` blocks staged secrets with gitleaks.
+- `pnpm run typecheck` and `pnpm test` block broken TypeScript or tests.
+- `pnpm run portable-fixtures` blocks personal machine paths or local-only fixture names from entering source, docs, and tests.
 
-Run `npm run project-health` before larger changes. Run `npm run verify` before
+Run `pnpm run project-health` before larger changes. Run `pnpm run verify` before
 release-sensitive changes. The detailed split between normal tests, smoke eval,
 AI-agent eval, GitHub Actions, and Claude Code commands is documented in
 [Eval and Quality Gates](eval-and-quality.md).
@@ -277,7 +277,7 @@ AI-agent eval, GitHub Actions, and Claude Code commands is documented in
 
 `integrations account-guide --target wechat` returns the QR-login setup checklist, official references, and troubleshooting notes. Use `wechat setup`, `wechat doctor`, and `wechat start` for WeChat long-connection setup.
 
-`integrations account-validate --target wechat` runs the executable validation playbook: preflight, dry-run, send-readiness, and final network-send stage. It does not perform the network-send stage unless `--send` is present. With `--send`, it uses the same env-only credentials and sender as `integrations send`, then reports each stage and any blockers. Add `--record` to persist a sanitized validation summary.
+`integrations account-validate --target wechat` runs the executable validation playbook: preflight, dry-run, send-readiness, and final network-send stage. Direct HTTP/request-preview sending is deprecated and blocked, so the network-send stage reports the long-connection blocker instead of sending. Add `--record` to persist a sanitized validation summary.
 
 `integrations validation-history --target wechat` lists sanitized account validation records saved from `account-validate --record`. Records include stages, blockers, delivery target API, and sanitized provider response metadata, but never persist integration credentials or tokens.
 
@@ -286,6 +286,18 @@ AI-agent eval, GitHub Actions, and Claude Code commands is documented in
 `integrations event-coaching --target feishu|wechat --event-json <json>` normalizes an inbound platform message event, extracts the text, then runs the same message-coaching workflow. Feishu supports `event.message.content` containing either text JSON or a plain string. WeChat supports JSON fields such as `Content`, `MsgId`, and `FromUserName`. Add `--record` to store the lesson in the review queue.
 
 `integrations deliver --target obsidian --dir <path>` remains available as a deferred local helper. It previews the daily review delivery path and payload without writing files. Add `--write` to write the daily review pack for a date to `<path>/YYYY-MM-DD.md`. This stays offline, returns `wouldSend: false`, and never sends network messages.
+
+`integrations deliver --target feishu [--date YYYY-MM-DD]` sends a compact daily review through the local `tmux-claude-bot` Feishu/Lark notifier. It filters noisy review items, selects up to 12 due items, splits content into messages capped at about 1,000 characters, and appends `[truncated; see the linked report/logs for full details]` when the chat payload is capped. It uses the project-bound `english-pilot` tmux session by default; set `ENGLISH_PILOT_FEISHU_SESSION` to override the session used for Feishu group routing.
+
+`integrations deliver --target wechat [--date YYYY-MM-DD]` sends the prepared daily review payload through the already-running daemon's WeChat long connection. It does not autostart the daemon and does not use the deprecated direct sender. If the daemon socket is unavailable, the WeChat channel is not running, or no QR-login account/allowed user is ready, it returns a structured blocker.
+
+On macOS, install a daily 08:00 Feishu daily-review schedule after `tmux-claude-bot` is installed and running with Feishu/Lark configured:
+
+```bash
+pnpm run schedule:feishu-daily-review:install
+```
+
+The schedule registers `com.octopusgarage.english-pilot.feishu-daily-review` as a user launchd job. It runs `english-pilot integrations deliver --target feishu --json`, reads background environment values from `~/.english-pilot/.env`, routes through `tcb notify --channel lark`, and writes launchd output to `~/.english-pilot/logs/feishu-daily-review-launchd.out.log` and `~/.english-pilot/logs/feishu-daily-review-launchd.err.log`.
 
 `doctor` includes Feishu/Lark and WeChat long-connection preflight, voice provider preflight summaries, and recorded cloud STT provider assessment history. Add `--write --dir <path>` to export the diagnostic report as Markdown. Missing optional integration credentials, voice-provider configuration, or provider sample evidence does not make overall doctor status fail.
 
@@ -299,11 +311,11 @@ The external-validation verifier checks that the bundle manifest is consistent, 
 
 External Feishu, WeChat, or future CLI chat messages use an explicit local agent backend before invoking AI work. Active conversation tokens are stored locally under `~/.english-pilot/agent-sessions.json` and are reused only when backend and cwd still match. See `docs/agent-runtime-design.md` for the implemented `claude -p` / `codex exec` adapter and the MCP vs skill+CLI decision.
 
-`eval smoke` runs a deterministic local smoke suite in a temporary EnglishPilot home directory. It checks blocking with copyable rewrites, force-mode coaching for awkward mixed-language prompts, fake local-whisper transcription parsing, Feishu/WeChat `<english_pilot_coaching>` injection, and Codex dry-run command construction without invoking Codex. `npm run smoke:mcp-stdio` starts the built CLI as a real MCP stdio child process and verifies that MCP clients can list and call core tools such as `english_learning_brief`. `eval prompts` prints ready-to-use Claude/Codex prompt fixtures for manual or future real-agent evals. `npm run project-health` runs these smoke checks after build.
+`eval smoke` runs a deterministic local smoke suite in a temporary EnglishPilot home directory. It checks blocking with copyable rewrites, force-mode coaching for awkward mixed-language prompts, fake local-whisper transcription parsing, Feishu/WeChat `<english_pilot_coaching>` injection, and Codex dry-run command construction without invoking Codex. `pnpm run smoke:mcp-stdio` starts the built CLI as a real MCP stdio child process and verifies that MCP clients can list and call core tools such as `english_learning_brief`. `eval prompts` prints ready-to-use Claude/Codex prompt fixtures for manual or future real-agent evals. `pnpm run project-health` runs these smoke checks after build.
 
 `eval agent --backend claude|codex --case channel-weather|history-lesson` runs the opt-in AI-backed eval. `channel-weather` sends the channel-weather prompt fixture to the selected local agent and judges whether the output contains the main reply plus `English note`, the better weather phrase, `Why`, and IPA. `history-lesson` sends a reusable learning-brief fixture and judges whether the agent turns it into a concise teaching summary, corrected expressions, IPA, and a short practice speech. Add `--dry-run` to verify command construction without invoking the model. This eval is intentionally not part of `project-health` because real-agent mode depends on local agent credentials, model availability, and runtime behavior.
 
-The MCP server exposes the same integration, voice-practice, status, roadmap, config-profile, method-template, daily-check, coaching-context, history, and diagnostic helpers through `english_status`, `english_roadmap`, `english_roadmap_next`, `english_roadmap_env_template`, `english_external_validation_bundle`, `english_external_validation_bundle_verify`, `english_config_profiles`, `english_config_use`, `english_config_profile_status`, `english_config_progression_suggestion`, `english_config_progression_apply`, `english_method_templates`, `english_record_method_template`, `english_daily_check`, `english_coaching_context`, `english_input_history`, `english_notes_history`, `english_learning_brief`, `english_integration_targets`, `english_integration_credential_policy`, `english_integration_delivery_mode`, `english_integration_daily_pack`, `english_integration_dry_run`, `english_integration_preflight`, `english_integration_send_readiness`, `english_integration_send`, `english_integration_account_guide`, `english_integration_account_validate`, `english_integration_validation_history`, `english_integration_message_coaching`, `english_integration_event_coaching`, `english_integration_deliver`, `english_record_voice_practice`, `english_voice_providers`, `english_voice_stt_policy`, `english_voice_stt_contract`, `english_voice_stt_validate`, `english_voice_stt_assess_provider`, `english_voice_stt_assessment_history`, `english_voice_stt_provider_contract_draft`, `english_voice_stt_wrapper_template`, `english_voice_preflight`, `english_voice_transcribe`, `english_voice_practice_from_audio`, and `english_doctor`. `english_input_history` reads local prompt events with optional date/source/decision filters. `english_notes_history` reads reviewable English notes with optional date/tag/due filters. `english_learning_brief` combines recent inputs and notes into an agent-ready brief for user requests such as daily recaps, English lessons, speeches, or focused review plans. `english_roadmap` accepts optional `target: "feishu" | "wechat" | "cloud-stt"` and can write a Markdown handoff when `write: true` is passed with an optional `directory`; `english_roadmap_next` returns the next missing evidence command for the same optional target and can write a focused Markdown handoff with `write: true`; `english_roadmap_env_template` returns empty shell export and `.env` templates for the same optional target. `english_external_validation_bundle` accepts the same optional target and writes the combined Markdown and JSON handoff only when `write: true` is passed; `english_external_validation_bundle_verify` verifies an existing handoff without writing. `english_doctor` can also write a Markdown diagnostic report with `write: true`. `english_integration_deliver` currently supports Obsidian Markdown only and writes only when `write: true` is passed.
+The MCP server exposes the same integration, voice-practice, status, roadmap, config-profile, method-template, daily-check, coaching-context, history, and diagnostic helpers through `english_status`, `english_roadmap`, `english_roadmap_next`, `english_roadmap_env_template`, `english_external_validation_bundle`, `english_external_validation_bundle_verify`, `english_config_profiles`, `english_config_use`, `english_config_profile_status`, `english_config_progression_suggestion`, `english_config_progression_apply`, `english_method_templates`, `english_record_method_template`, `english_daily_check`, `english_coaching_context`, `english_input_history`, `english_notes_history`, `english_learning_brief`, `english_integration_targets`, `english_integration_credential_policy`, `english_integration_delivery_mode`, `english_integration_daily_pack`, `english_integration_dry_run`, `english_integration_preflight`, `english_integration_send_readiness`, `english_integration_send`, `english_integration_account_guide`, `english_integration_account_validate`, `english_integration_validation_history`, `english_integration_message_coaching`, `english_integration_event_coaching`, `english_integration_deliver`, `english_record_voice_practice`, `english_voice_providers`, `english_voice_stt_policy`, `english_voice_stt_contract`, `english_voice_stt_validate`, `english_voice_stt_assess_provider`, `english_voice_stt_assessment_history`, `english_voice_stt_provider_contract_draft`, `english_voice_stt_wrapper_template`, `english_voice_preflight`, `english_voice_transcribe`, `english_voice_practice_from_audio`, and `english_doctor`. `english_input_history` reads local prompt events with optional date/source/decision filters. `english_notes_history` reads reviewable English notes with optional date/tag/due filters. `english_learning_brief` combines recent inputs and notes into an agent-ready brief for user requests such as daily recaps, English lessons, speeches, or focused review plans. `english_roadmap` accepts optional `target: "feishu" | "wechat" | "cloud-stt"` and can write a Markdown handoff when `write: true` is passed with an optional `directory`; `english_roadmap_next` returns the next missing evidence command for the same optional target and can write a focused Markdown handoff with `write: true`; `english_roadmap_env_template` returns empty shell export and `.env` templates for the same optional target. `english_external_validation_bundle` accepts the same optional target and writes the combined Markdown and JSON handoff only when `write: true` is passed; `english_external_validation_bundle_verify` verifies an existing handoff without writing. `english_doctor` can also write a Markdown diagnostic report with `write: true`. `english_integration_deliver` supports Obsidian Markdown through MCP. WeChat daily-review delivery is exposed through the CLI because it must contact the already-running daemon control socket.
 
 `mcp config --json` prints a reusable MCP client config for `english-pilot serve --mcp`. `mcp config --write --json` writes the same config to `~/.english-pilot/mcp.json` for clients that import a standalone MCP config file. Claude and Codex installers still write their native MCP config files directly.
 

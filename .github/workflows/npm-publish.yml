@@ -24,14 +24,17 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.inputs.ref }}
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      - uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2 # v4.1.0
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-          cache: npm
+          cache: pnpm
       - name: Install gitleaks
         env:
           GITLEAKS_VERSION: 8.30.1
@@ -40,14 +43,14 @@ jobs:
           curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
             | tar -xz gitleaks
           sudo mv gitleaks /usr/local/bin/gitleaks
-      - run: npm ci
+      - run: pnpm install --frozen-lockfile
       - if: ${{ github.event.inputs.operation == 'publish' }}
-        run: npm run verify
+        run: pnpm run verify
       - if: ${{ github.event.inputs.operation == 'publish' }}
-        run: npm publish --provenance
+        run: pnpm publish --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - if: ${{ github.event.inputs.operation == 'access-public' }}
-        run: npm access set status=public @octopusgarage/english-pilot
+        run: pnpm access set status=public @octopusgarage/english-pilot
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

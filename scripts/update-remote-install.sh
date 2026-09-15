@@ -10,7 +10,7 @@ Examples:
   scripts/update-remote-install.sh ys-aquria@mac2015.local 0.1.1
   SSH_OPTS="-i $HOME/.ssh/id_rsa -o IdentitiesOnly=yes" scripts/update-remote-install.sh user@host latest
 
-Updates a remote npm-installed EnglishPilot, restarts the managed service, and
+Updates a remote EnglishPilot installation, restarts the managed service, and
 prints lightweight health checks. Runtime data under ~/.english-pilot is kept.
 EOF
 }
@@ -36,23 +36,24 @@ ssh ${SSH_OPTS:-} "$REMOTE" "ENGLISH_PILOT_PACKAGE='$PACKAGE' ENGLISH_PILOT_VERS
 set -eu
 
 find_node_tools() {
-  if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
+  if command -v node >/dev/null 2>&1 && command -v pnpm >/dev/null 2>&1; then
     return 0
   fi
 
   for bin in \
     "$HOME"/.nvm/versions/node/*/bin \
     "$HOME"/.local/share/fnm/node-versions/*/installation/bin \
+    "$HOME"/.local/share/pnpm \
     /opt/homebrew/bin \
     /usr/local/bin; do
-    if [ -x "$bin/node" ] && [ -x "$bin/npm" ]; then
+    if [ -x "$bin/node" ] && [ -x "$bin/pnpm" ]; then
       PATH="$bin:$PATH"
       export PATH
       return 0
     fi
   done
 
-  echo "Cannot find node and npm on remote host." >&2
+  echo "Cannot find node and pnpm on remote host." >&2
   exit 127
 }
 
@@ -75,16 +76,16 @@ print_section "remote"
 hostname
 whoami
 node -v
-npm -v
+pnpm -v
 
 print_section "before"
-npm list -g --depth=0 2>/dev/null | grep -i '@octopusgarage/english-pilot' || true
+pnpm list -g --depth=0 2>/dev/null | grep -i '@octopusgarage/english-pilot' || true
 
 print_section "install"
-npm install -g "${ENGLISH_PILOT_PACKAGE}@${ENGLISH_PILOT_VERSION}"
+pnpm add -g "${ENGLISH_PILOT_PACKAGE}@${ENGLISH_PILOT_VERSION}"
 
 print_section "after"
-npm list -g --depth=0 2>/dev/null | grep -i '@octopusgarage/english-pilot' || true
+pnpm list -g --depth=0 2>/dev/null | grep -i '@octopusgarage/english-pilot' || true
 node -e 'console.log(require("@octopusgarage/english-pilot/package.json").version)' 2>/dev/null ||
   english-pilot status --json 2>/dev/null | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1
 

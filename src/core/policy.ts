@@ -24,6 +24,9 @@ export const defaultConfig: EnglishPilotConfig = {
   externalAgentClaudeBinary: 'claude',
   externalAgentCodexBinary: 'codex',
   externalAgentCodexSandbox: 'workspace-write',
+  assistantEnglishNoteStyle: 'software-engineering',
+  assistantEnglishNoteDepth: 'rich',
+  assistantEnglishNoteReferencePaths: [],
   disabledProjectPaths: [],
 };
 

@@ -1,12 +1,12 @@
 ---
-description: Update a remote EnglishPilot npm installation over SSH
+description: Update a remote EnglishPilot installation over SSH
 argument-hint: '<user@host> [version]'
 allowed-tools: Bash, Read
 ---
 
 Update an already-installed remote EnglishPilot service. Use this for machines
 like `ys-aquria@mac2015.local` where EnglishPilot is installed globally through
-npm and runs as a managed launchd/systemd service.
+pnpm and runs as a managed launchd/systemd service.
 
 Reference: `docs/manual.md` and `scripts/update-remote-install.sh`.
 

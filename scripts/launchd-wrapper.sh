@@ -28,7 +28,7 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 if [ ! -f "$CLI_JS" ]; then
-  echo "launchd-wrapper: missing $CLI_JS; run npm run build or use service install-dev" >&2
+  echo "launchd-wrapper: missing $CLI_JS; run pnpm run build or use service install-dev" >&2
   exit 1
 fi
 

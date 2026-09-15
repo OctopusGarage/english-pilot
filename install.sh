@@ -59,7 +59,7 @@ EOF
 need curl
 need tar
 need node
-need npm
+need pnpm
 
 if [ "$VERSION" = "latest" ]; then
   VERSION="$(latest_tag)"
@@ -70,7 +70,7 @@ download_release "$VERSION"
 copy_tree
 
 cd "$INSTALL_DIR"
-HUSKY=0 npm install --omit=dev --ignore-scripts
+HUSKY=0 pnpm install --prod --ignore-scripts
 
 write_launcher
 "$BIN_DIR/english-pilot" setup --yes

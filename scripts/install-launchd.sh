@@ -6,6 +6,7 @@ PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 ROOT="$(cd -- "$(dirname -- "$0")/.." && pwd)"
 WRAPPER="launchd-wrapper.sh"
 BASE_SERVICE_PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+RUNTIME_HOME="${ENGLISH_PILOT_HOME:-$HOME/.english-pilot}"
 
 prepend_path_dir() {
   dir="$1"
@@ -18,9 +19,9 @@ prepend_path_dir() {
 
 SERVICE_PATH="$BASE_SERVICE_PATH"
 NODE_COMMAND="$(command -v node 2>/dev/null || true)"
-NPM_COMMAND="$(command -v npm 2>/dev/null || true)"
+PNPM_COMMAND="$(command -v pnpm 2>/dev/null || true)"
 prepend_path_dir "${NODE_COMMAND%/*}"
-prepend_path_dir "${NPM_COMMAND%/*}"
+prepend_path_dir "${PNPM_COMMAND%/*}"
 
 if [ "${1:-}" = "--dev" ]; then
   WRAPPER="dev-launchd-wrapper.sh"
@@ -32,10 +33,11 @@ if [ ! -f "$ROOT/scripts/$WRAPPER" ]; then
   exit 1
 fi
 
-mkdir -p "$HOME/Library/LaunchAgents" "$HOME/.english-pilot/logs"
+mkdir -p "$HOME/Library/LaunchAgents" "$RUNTIME_HOME/logs"
 sed \
   -e "s#__PROJECT_DIR__#$ROOT#g" \
   -e "s#__WRAPPER__#$WRAPPER#g" \
+  -e "s#__HOME__/.english-pilot#$RUNTIME_HOME#g" \
   -e "s#__HOME__#$HOME#g" \
   -e "s#__SERVICE_PATH__#$SERVICE_PATH#g" \
   "$ROOT/scripts/english-pilot.plist" > "$PLIST"

@@ -104,8 +104,9 @@ case "$ACTION" in
     ;;
   logs)
     if [ "$(uname -s)" = "Darwin" ]; then
-      mkdir -p "$HOME/.english-pilot/logs"
-      tail -n 200 -f "$HOME/.english-pilot/logs/launchd.out.log" "$HOME/.english-pilot/logs/launchd.err.log"
+      logs_dir="$(runtime_home)/logs"
+      mkdir -p "$logs_dir"
+      tail -n 200 -f "$logs_dir/launchd.out.log" "$logs_dir/launchd.err.log"
     else
       journalctl --user -u english-pilot -f
     fi

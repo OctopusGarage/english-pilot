@@ -69,7 +69,7 @@ run_agent_eval() {
   done
 }
 
-npm run build
+pnpm run build
 node dist/src/bin/english-pilot.js eval smoke --json
 node scripts/smoke-mcp-stdio.mjs
 

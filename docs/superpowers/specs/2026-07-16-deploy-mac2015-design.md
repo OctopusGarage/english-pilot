@@ -6,7 +6,7 @@ Add a project-local deployment workflow that installs the current EnglishPilot c
 
 ## Deployment Source
 
-The local checkout is authoritative. The deploy command builds the project and creates an npm tarball with `npm pack`, so committed and uncommitted package content is deployed using the same artifact layout as a registry release. The tarball is copied to a temporary remote path and installed globally with the remote user's npm.
+The local checkout is authoritative. The deploy command builds the project and creates a tarball with `pnpm pack`, so committed and uncommitted package content is deployed using the same artifact layout as a registry release. The tarball is copied to a temporary remote path and installed globally with the remote user's pnpm.
 
 The workflow does not require a Git checkout, Git credentials, pnpm, or TypeScript tooling on mac2015.
 
@@ -25,7 +25,7 @@ Create `.claude/commands/deploy-mac2015.md` as the agent-facing command contract
 
 The deployment preserves all user-scoped state under `~/.english-pilot`, including channel credentials, logs, learning history, and voice tooling.
 
-The remote script discovers Node and npm from the login path, NVM, FNM, Homebrew, or `/usr/local`. It records the installed version and live daemon PID before installation. After global installation it stops a live EnglishPilot daemon identified by the runtime lock only when the PID belongs to an EnglishPilot process.
+The remote script discovers Node and pnpm from the login path, NVM, FNM, Homebrew, or `/usr/local`. It records the installed version and live daemon PID before installation. After global installation it stops a live EnglishPilot daemon identified by the runtime lock only when the PID belongs to an EnglishPilot process.
 
 When the user's GUI launchd domain and `com.octopusgarage.english-pilot` service are available, the workflow restarts that managed service. Otherwise it starts `english-pilot run` as a detached process, writes to `~/.english-pilot/logs/manual-daemon.log`, and reports that detached mode has no reboot or crash auto-restart guarantee.
 
@@ -35,13 +35,13 @@ The fallback loads `~/.english-pilot/.env` without printing it. It never outputs
 
 Both modes report the remote hostname and user, installed package version, daemon PID, runtime status, launchd availability, WeChat doctor summary, and local-whisper voice preflight. Deploy additionally reports the local package version, generated artifact, before/after installed versions, stopped PID, selected lifecycle mode, and verified new PID.
 
-Deployment fails if the npm build or pack fails, SSH/SCP fails, global installation fails, a managed service restart fails, or no live daemon PID appears before the verification deadline. Optional channel and voice diagnostics are reported but do not fail deployment because channel credentials and local voice dependencies may be intentionally absent.
+Deployment fails if the build or pack fails, SSH/SCP fails, global installation fails, a managed service restart fails, or no live daemon PID appears before the verification deadline. Optional channel and voice diagnostics are reported but do not fail deployment because channel credentials and local voice dependencies may be intentionally absent.
 
 Temporary local and remote artifacts are removed with shell traps.
 
 ## Testing
 
-Extend `tests/eval/project-agent-commands.test.ts` first to require the new Claude command, executable deploy script, default remote, `status`/`deploy` modes, local `npm pack`, remote install, detached fallback, lifecycle warning, and verification fields. Run the focused test to observe the expected failure before creating implementation files.
+Extend `tests/eval/project-agent-commands.test.ts` first to require the new Claude command, executable deploy script, default remote, `status`/`deploy` modes, local `pnpm pack`, remote install, detached fallback, lifecycle warning, and verification fields. Run the focused test to observe the expected failure before creating implementation files.
 
 After implementation, run the focused command-contract test, shellcheck, build, and deterministic smoke suites. Finally run `status`, then `deploy`, then a fresh `status` against mac2015 and independently confirm that the verified PID is live and belongs to EnglishPilot.
 
