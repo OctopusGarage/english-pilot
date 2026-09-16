@@ -82,6 +82,7 @@ The goal is not to replace English study time. It makes normal work conversation
 - **Copyable rewrite on block** — blocked messages include a practical English starting point.
 - **Inline teaching notes** — allowed prompts can produce compact Better/Why/IPA coaching notes; `force` mode raises the frequency.
 - **Reviewable learning items** — useful phrases are stored with scene, pattern, IPA, and spaced-review metadata.
+- **Reusable translation lookup** — selected text can return an immediate local glossary result plus optional agent enrichment for richer explanations.
 - **Claude Code and Codex installers** — installs hooks, MCP config, and host guidance.
 - **MCP tool surface** — exposes analysis, rewrite, review, config, roadmap, integration, voice, and diagnostic tools.
 - **Feishu/Lark long connection** — QR-assisted setup, allowlist, threshold checks, `/new`, voice-to-text handoff, and local agent replies.
@@ -227,6 +228,42 @@ english-pilot doctor --json
 The submit hook blocks prompts over the configured Chinese/non-English ratio. MCP and host guidance ask agents to attach final-response coaching notes after the main task is complete; the Stop hook turns those notes into review items. `force` mode asks agents to attach a compact teaching note whenever the prompt has Chinese fragments, awkward English, or an obvious everyday improvement.
 
 For recap, lesson, speech, or review requests, agents can use `english_input_history`, `english_notes_history`, and `english_learning_brief` to read local prompt history and English notes before generating teaching content.
+
+### Translation Lookup
+
+`translate` is a reusable JSON surface for selected text, designed for the Ghostty companion and safe to call from other local tools. The local stage returns immediately from EnglishPilot's glossary, pronunciation, and lesson builders; richer agent output is optional and requested separately.
+
+```bash
+english-pilot translate --text "workflow" --json
+printf '%s' "make the failure path explicit" | english-pilot translate --stdin --json
+english-pilot translate --request-json --json <<'JSON'
+{"requestId":"ghostty-1","text":"workflow","source":"ghostty"}
+JSON
+english-pilot translate enrich --text "workflow" --backend codex --dry-run --json
+```
+
+When a personal glossary entry is configured with a meaning or IPA value, the local response may include the corresponding `translation` or `pronunciation` field with `stage: "local"` and `status: "ready"`. `translate enrich` returns `stage: "agent"` responses; clients should keep the local result visible and only apply an enrichment response when its `requestId` still matches the active selection, discarding stale replies from older selections.
+
+Current enrichment safety is conservative: Codex runs in a temporary working directory with read-only sandboxing, a reduced process environment, and Codex shell-environment inheritance disabled, while Claude enrichment is rejected because the current Claude adapter cannot guarantee safe permissions.
+
+### Ghostty macOS Companion
+
+The macOS companion gives Ghostty a selected-text translation popup without requiring a Ghostty plugin. It runs as a small menu bar app, captures the current selection through the clipboard fallback, asks `english-pilot translate` for a local result, and shows a floating panel that can stay pinned above the terminal.
+
+```bash
+scripts/install-ghostty-companion.sh
+"$HOME/Library/Application Support/EnglishPilot/EnglishPilotCompanion/run-english-pilot-companion.sh"
+```
+
+After starting it once, grant Accessibility permission in System Settings -> Privacy & Security -> Accessibility for `~/Applications/EnglishPilotCompanion.app`. Then select a word, phrase, or sentence in Ghostty and press `Cmd+Shift+D`.
+
+Codex enrichment is enabled by default for the companion, so arbitrary phrases and sentences can continue past the fast local lookup. To disable enrichment for a fully local-only run:
+
+```bash
+ENGLISH_PILOT_TRANSLATE_AGENT=off "$HOME/Library/Application Support/EnglishPilot/EnglishPilotCompanion/run-english-pilot-companion.sh"
+```
+
+`ENGLISH_PILOT_BINARY` can point at a specific `english-pilot` executable if it is not on `PATH`. `ENGLISH_PILOT_CODEX_BINARY` can point at a specific `codex` executable; the installer also stores the discovered Codex path in the app bundle for Finder-launched runs. The launcher uses `open` for normal starts and runs the app executable directly when `ENGLISH_PILOT_BINARY`, `ENGLISH_PILOT_TRANSLATE_AGENT`, `ENGLISH_PILOT_CODEX_BINARY`, or `ENGLISH_PILOT_SELECTION_FILE` is set. `ENGLISH_PILOT_SELECTION_FILE` is reserved for Ghostty selection-file integration; clipboard capture remains the default path today.
 
 ### Feishu/Lark
 

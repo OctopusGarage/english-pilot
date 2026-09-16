@@ -101,6 +101,10 @@ node dist/src/bin/english-pilot.js coach context --json
 node dist/src/bin/english-pilot.js coach templates --json
 node dist/src/bin/english-pilot.js coach templates --scene debugging --json
 node dist/src/bin/english-pilot.js coach templates --scene debugging --record --json
+node dist/src/bin/english-pilot.js translate --text "workflow" --json
+node dist/src/bin/english-pilot.js translate --stdin --json
+node dist/src/bin/english-pilot.js translate --request-json --json
+node dist/src/bin/english-pilot.js translate enrich --text "workflow" --backend codex --dry-run --json
 node dist/src/bin/english-pilot.js pronounce --text "threshold workflow" --json
 node dist/src/bin/english-pilot.js voice providers --json
 node dist/src/bin/english-pilot.js voice stt-policy --json
@@ -411,6 +415,63 @@ English note: "原句" -> "A more natural English version."; Why: one practical 
 ## Learning Loop
 
 `coach` extracts a reusable lesson from a real prompt: suggested English, scene, key phrases, IPA, sentence pattern, and a retrieval-practice prompt. Use `--record` when the item is worth reviewing later. `coach context` returns structured coaching guidance plus the current intensity, cooldown, and daily-cap state; in `force` mode it tells agents to append compact teaching notes much more aggressively. `coach templates` lists practical workplace-English templates for common scenes such as asking for help, clarifying requirements, debugging, reporting blockers, proposing next steps, and summarizing verified results. Add `--scene <id> --record` to store one template as a normal review item. `pronounce` returns IPA plus word-stress hints for known work-English words.
+
+`translate` is the reusable selected-text lookup surface used by the Ghostty companion. It has a fast local stage and a separate optional agent enrichment stage, so a UI can show the local result immediately and only replace or enrich it after a matching agent response arrives.
+
+```bash
+english-pilot translate --text "workflow" --json
+printf '%s' "make the failure path explicit" | english-pilot translate --stdin --json
+english-pilot translate --request-json --json <<'JSON'
+{"requestId":"ghostty-1","text":"workflow","source":"ghostty"}
+JSON
+english-pilot translate enrich --text "workflow" --backend codex --dry-run --json
+```
+
+The request-json contract is:
+
+```json
+{
+  "requestId": "ghostty-1",
+  "text": "workflow",
+  "source": "ghostty",
+  "context": "optional surrounding text"
+}
+```
+
+`requestId`, `text`, and `source` are required for `--request-json`; `requestId` and `source` must be non-empty strings no longer than 128 characters. `context` is optional and is only used by enrichment. Local lookups also accept `--text` and `--stdin`. The local JSON response preserves `requestId` and `source`, uses `stage: "local"` and `status: "ready"`, and returns a `result` with `original`, `normalized`, `kind`, `explanation`, `examples`, `collocations`, `ipa`, and a reviewable `lesson`. If a matching personal glossary entry exists, its meaning is returned as `translation` and its IPA can be returned as `pronunciation`; otherwise the response remains useful but marks the translation as unavailable locally in human output.
+
+`translate enrich` returns `stage: "agent"` responses. Dry runs return `status: "loading"`, `dryRun: true`, and the planned agent invocation without starting Codex. Real enrichment asks the agent for strict JSON with `translation`, `explanation`, and optional `partOfSpeech`, `examples`, and `collocations`. The companion should keep the local result on screen while enrichment runs, then apply the agent result only when the response `requestId` still equals the current selection's request id. If the user changes selections before an older enrichment returns, discard that stale response.
+
+Current safety behavior is intentionally narrow. Codex enrichment runs in a temporary isolated directory, forces the Codex sandbox to read-only, strips inherited shell environment variables down to a small allowlist, disables Codex shell environment inheritance, limits selected text, context, request JSON, and agent output sizes, and removes the temporary directory after completion or termination. Claude enrichment is rejected with `UNSAFE_AGENT_BACKEND` because the current Claude adapter requires `bypassPermissions`, so EnglishPilot cannot guarantee safe permissions for this translation path yet.
+
+### Ghostty macOS companion
+
+The companion is a local macOS app for reading English inside Ghostty. It does not depend on a Ghostty plugin system: Ghostty provides the selected text, EnglishPilot performs the lookup, and the companion displays the result in a floating panel.
+
+Install and start it:
+
+```bash
+scripts/install-ghostty-companion.sh
+"$HOME/Library/Application Support/EnglishPilot/EnglishPilotCompanion/run-english-pilot-companion.sh"
+```
+
+The installer builds `macos/EnglishPilotCompanion` in release mode, creates `~/Applications/EnglishPilotCompanion.app`, stores the compiled executable inside that app bundle, and writes a launcher script under `~/Library/Application Support/EnglishPilot/EnglishPilotCompanion/`. The launcher resolves `english-pilot` from `PATH`. If your CLI lives somewhere else, set an explicit binary:
+
+```bash
+ENGLISH_PILOT_BINARY=/absolute/path/to/english-pilot \
+  "$HOME/Library/Application Support/EnglishPilot/EnglishPilotCompanion/run-english-pilot-companion.sh"
+```
+
+After launching once, grant permission in System Settings -> Privacy & Security -> Accessibility. Add or enable `~/Applications/EnglishPilotCompanion.app`. This is required so the companion can trigger Copy and read the selected text. Then select an English word, phrase, or sentence in Ghostty and press `Cmd+Shift+D`.
+
+Codex enrichment is enabled by default for the companion. It runs after the fast local lookup when richer translation is needed. To disable enrichment and keep the companion local-only:
+
+```bash
+ENGLISH_PILOT_TRANSLATE_AGENT=off \
+  "$HOME/Library/Application Support/EnglishPilot/EnglishPilotCompanion/run-english-pilot-companion.sh"
+```
+
+The companion accepts `ENGLISH_PILOT_TRANSLATE_AGENT=codex`, `claude`, or `off`; current CLI safety rules reject Claude enrichment until a safe Claude adapter is available. `ENGLISH_PILOT_CODEX_BINARY=/absolute/path/to/codex` can override the Codex binary, and the installer stores the discovered Codex path for Finder-launched runs. `ENGLISH_PILOT_SELECTION_FILE=/absolute/path` is reserved for Ghostty selection-file handoff; clipboard capture remains the default fallback.
 
 `voice providers` lists supported voice input providers. `manual` transcript review, `local-whisper` command transcription, and `cloud-stt` generic JSON transcription are supported now. Local Whisper remains the default offline path.
 
