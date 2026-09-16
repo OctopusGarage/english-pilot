@@ -23,6 +23,11 @@ export interface ExternalAgentRunOptions {
   sessionId?: string;
   threadId?: string;
   spawnProcess?: typeof spawn;
+  maxOutputBytes?: number;
+  waitForChildCloseAfterTermination?: boolean;
+  spawnEnv?: NodeJS.ProcessEnv;
+  onChildTermination?: () => void;
+  codexShellEnvironmentPolicy?: 'all' | 'none';
 }
 
 export interface ExternalAgentRunResult extends ExternalAgentInvocation {
@@ -34,6 +39,8 @@ export interface ExternalAgentRunResult extends ExternalAgentInvocation {
   stderr: string;
   sessionId?: string;
   threadId?: string;
+  outputLimitExceeded?: boolean;
+  terminationFailure?: 'SIGKILL_NOT_SENT';
 }
 
 export type ExternalAgentChildProcess = ChildProcessWithoutNullStreams;

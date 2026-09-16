@@ -34,6 +34,8 @@ export function helpText(): string {
     '  english-pilot coach context [--json]',
     '  english-pilot coach templates [--scene <id>] [--record] [--json]',
     '  english-pilot pronounce --text "..." [--json]',
+    '  english-pilot translate --text "..." [--json] | --stdin [--json] | --request-json [--json]',
+    '  english-pilot translate enrich (--text "..." | --stdin | --request-json) --backend claude|codex [--dry-run] [--json]',
     '  english-pilot agent doctor [--json]',
     '  english-pilot agent run --text "..." [--backend claude|codex] [--cwd <path>] [--dry-run] [--json]',
     '  english-pilot voice providers [--json]',

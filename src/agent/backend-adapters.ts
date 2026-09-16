@@ -44,7 +44,7 @@ const codexBackendAdapter: ExternalAgentBackendAdapter = {
       '-c',
       'approval_policy="never"',
       '-c',
-      'shell_environment_policy.inherit="all"',
+      `shell_environment_policy.inherit="${options.codexShellEnvironmentPolicy ?? 'all'}"`,
       '--skip-git-repo-check',
       '-C',
       cwd,

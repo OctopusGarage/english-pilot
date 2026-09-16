@@ -2,7 +2,8 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { runCli, runCliAsync } from '../../src/adapters/cli.js';
+import { runCli, runCliAsync, shouldReadCliStdin } from '../../src/adapters/cli.js';
+import { runExternalAgent } from '../../src/agent/runner.js';
 
 describe('runCli', () => {
   let previousHome: string | undefined;
@@ -58,6 +59,199 @@ describe('runCli', () => {
     expect(result.stdout).toContain(
       'english-pilot gate disable (--repo-ignore|--global-ignore) [--cwd <path>] [--json]',
     );
+    expect(result.stdout).toContain(
+      'english-pilot translate enrich (--text "..." | --stdin | --request-json) --backend claude|codex [--dry-run] [--json]',
+    );
+  });
+
+  it('returns a local translation stage from stdin', () => {
+    const result = runCli(['translate', '--stdin', '--json'], 'workflow');
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      requestId: expect.any(String),
+      stage: 'local',
+      status: 'ready',
+      result: {
+        original: 'workflow',
+        kind: 'word',
+        ipa: expect.any(Array),
+      },
+    });
+  });
+
+  it('accepts a JSON request and preserves requestId and source', () => {
+    const result = runCli(
+      ['translate', '--request-json', '--json'],
+      JSON.stringify({
+        requestId: 'ghostty-1',
+        text: 'make the failure path explicit',
+        source: 'ghostty',
+      }),
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      requestId: 'ghostty-1',
+      source: 'ghostty',
+      stage: 'local',
+      status: 'ready',
+      result: {
+        kind: 'phrase',
+      },
+    });
+  });
+
+  it('records a lookup when requested', () => {
+    const result = runCli(['translate', '--text', 'workflow', '--record', '--json']);
+    const review = runCli(['review', '--json']);
+
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      recorded: true,
+      item: {
+        original: 'workflow',
+        tags: expect.arrayContaining(['ghostty-lookup']),
+      },
+    });
+    expect(JSON.parse(review.stdout)).toContainEqual(
+      expect.objectContaining({
+        original: 'workflow',
+      }),
+    );
+  });
+
+  it('rejects empty selection without reading stale clipboard data', () => {
+    const result = runCli(['translate', '--stdin', '--json'], '   ');
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toEqual({
+      requestId: expect.any(String),
+      source: 'cli',
+      stage: 'local',
+      status: 'error',
+      error: {
+        code: 'EMPTY_SELECTION',
+        message: 'Selected text must not be empty.',
+      },
+    });
+  });
+
+  it('reads process stdin for request-json without requiring --stdin', () => {
+    expect(shouldReadCliStdin(['translate', '--request-json', '--json'])).toBe(true);
+    expect(shouldReadCliStdin(['translate', '--stdin', '--json'])).toBe(true);
+    expect(shouldReadCliStdin(['translate', '--json'])).toBe(false);
+  });
+
+  it('returns a structured local error for malformed request JSON', () => {
+    const result = runCli(['translate', '--request-json', '--json'], '{not json');
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toEqual({
+      stage: 'local',
+      status: 'error',
+      error: {
+        code: 'INVALID_REQUEST_JSON',
+        message: 'Translation request JSON is invalid.',
+      },
+    });
+  });
+
+  it('rejects request JSON without required metadata and preserves available metadata', () => {
+    const result = runCli(
+      ['translate', '--request-json', '--json'],
+      JSON.stringify({
+        requestId: 'ghostty-missing-source',
+        text: 'workflow',
+      }),
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toEqual({
+      requestId: 'ghostty-missing-source',
+      stage: 'local',
+      status: 'error',
+      error: {
+        code: 'MISSING_REQUEST_FIELD',
+        message: 'Translation request JSON must include non-empty requestId, text, and source.',
+      },
+    });
+  });
+
+  it('rejects oversized local request metadata without echoing the oversized field', () => {
+    const oversizedRequestId = runCli(
+      ['translate', '--request-json', '--json'],
+      JSON.stringify({
+        requestId: 'x'.repeat(129),
+        text: 'workflow',
+        source: 'ghostty',
+      }),
+    );
+    const oversizedSource = runCli(
+      ['translate', '--request-json', '--json'],
+      JSON.stringify({
+        requestId: 'ghostty-local-1',
+        text: 'workflow',
+        source: 'x'.repeat(129),
+      }),
+    );
+
+    expect(oversizedRequestId.exitCode).toBe(1);
+    expect(oversizedRequestId.stderr).toBe('');
+    expect(JSON.parse(oversizedRequestId.stdout)).toEqual({
+      source: 'ghostty',
+      stage: 'local',
+      status: 'error',
+      error: {
+        code: 'TRANSLATION_REQUEST_FIELD_TOO_LARGE',
+        message: 'Translation request field "requestId" exceeds the 128-character limit.',
+      },
+    });
+    expect(oversizedSource.exitCode).toBe(1);
+    expect(oversizedSource.stderr).toBe('');
+    expect(JSON.parse(oversizedSource.stdout)).toEqual({
+      requestId: 'ghostty-local-1',
+      stage: 'local',
+      status: 'error',
+      error: {
+        code: 'TRANSLATION_REQUEST_FIELD_TOO_LARGE',
+        message: 'Translation request field "source" exceeds the 128-character limit.',
+      },
+    });
+  });
+
+  it('rejects empty local request metadata without emitting metadata', () => {
+    const result = runCli(
+      ['translate', '--request-json', '--json'],
+      JSON.stringify({
+        requestId: ' ',
+        text: 'workflow',
+        source: '',
+      }),
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toEqual({
+      stage: 'local',
+      status: 'error',
+      error: {
+        code: 'MISSING_REQUEST_FIELD',
+        message: 'Translation request JSON must include non-empty requestId, text, and source.',
+      },
+    });
+  });
+
+  it('keeps plain stderr errors for non-JSON translate requests', () => {
+    const result = runCli(['translate', '--request-json'], '{not json');
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe('Translation request JSON is invalid.\n');
   });
 
   it('dry-runs a Claude external agent invocation from the CLI', async () => {
@@ -113,6 +307,544 @@ describe('runCli', () => {
       promptStdin: 'Reply to this WeChat message.',
     });
     expect(payload.args).toEqual(expect.arrayContaining(['exec', '--json', '-C', '/tmp/channel-project', '-']));
+  });
+
+  it('dry-runs translation enrichment without starting an external agent', async () => {
+    const result = await runCliAsync([
+      'translate',
+      'enrich',
+      '--text',
+      'workflow',
+      '--backend',
+      'codex',
+      '--dry-run',
+      '--json',
+    ]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      requestId: expect.any(String),
+      source: 'cli',
+      stage: 'agent',
+      status: 'loading',
+      dryRun: true,
+      invocation: {
+        operation: 'external-agent-run',
+        backend: 'codex',
+        dryRun: true,
+        exitCode: 0,
+        cwd: expect.stringContaining(tmpdir()),
+        args: expect.arrayContaining(['--sandbox', 'read-only']),
+      },
+    });
+    const payload = JSON.parse(result.stdout);
+    expect(payload.invocation.cwd).not.toBe(process.cwd());
+    expect(payload.invocation.args).not.toContain('workspace-write');
+    expect(payload.invocation.args).not.toContain('bypassPermissions');
+  });
+
+  it('rejects enrichment without an explicit input mode before invoking an agent', async () => {
+    let invoked = false;
+    const result = await runCliAsync(['translate', 'enrich', '--backend', 'codex', '--json'], '', {
+      runAgent: async () => {
+        invoked = true;
+        throw new Error('must not invoke enrichment without input');
+      },
+    });
+
+    expect(result.exitCode).toBe(1);
+    expect(invoked).toBe(false);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      stage: 'agent',
+      status: 'error',
+      error: {
+        code: 'MISSING_INPUT_MODE',
+      },
+    });
+  });
+
+  it('rejects synchronous enrichment dispatch instead of falling back to local lookup', () => {
+    const result = runCli(['translate', 'enrich', '--backend', 'codex', '--json']);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('Use runCliAsync for `english-pilot translate enrich`');
+  });
+
+  it('rejects Claude enrichment because the current adapter cannot guarantee safe permissions', async () => {
+    let invoked = false;
+    const result = await runCliAsync(
+      ['translate', 'enrich', '--text', 'workflow', '--backend', 'claude', '--json'],
+      '',
+      {
+        runAgent: async () => {
+          invoked = true;
+          throw new Error('must not invoke unsafe Claude enrichment');
+        },
+      },
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(invoked).toBe(false);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      stage: 'agent',
+      status: 'error',
+      error: {
+        code: 'UNSAFE_AGENT_BACKEND',
+      },
+    });
+  });
+
+  it('returns validated agent enrichment with request correlation', async () => {
+    let prompt = '';
+    const result = await runCliAsync(
+      ['translate', 'enrich', '--request-json', '--backend', 'codex', '--json'],
+      JSON.stringify({
+        requestId: 'ghostty-enrich-1',
+        source: 'ghostty',
+        text: 'exacerbates',
+        context: 'workflow discussion',
+      }),
+      {
+        runAgent: async (options) => {
+          prompt = options.prompt;
+          return {
+            operation: 'external-agent-run',
+            backend: 'codex',
+            command: 'codex',
+            args: ['-p'],
+            cwd: process.cwd(),
+            promptStdin: options.prompt,
+            dryRun: false,
+            exitCode: 0,
+            stdout: '{"translation":"使恶化","explanation":"make worse"}',
+            stderr: '',
+          };
+        },
+      },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(prompt).toContain('Return JSON only');
+    expect(JSON.parse(result.stdout)).toEqual({
+      requestId: 'ghostty-enrich-1',
+      source: 'ghostty',
+      stage: 'agent',
+      status: 'ready',
+      result: {
+        translation: '使恶化',
+        explanation: 'make worse',
+        examples: [],
+        collocations: [],
+      },
+    });
+  });
+
+  it('sanitizes the translation enrichment environment and Codex shell inheritance', async () => {
+    const previousPath = process.env.PATH;
+    const previousSecret = process.env.OPENAI_API_KEY;
+    process.env.PATH = '/safe/bin';
+    process.env.OPENAI_API_KEY = 'secret-that-must-not-cross-the-boundary';
+    let receivedOptions: { spawnEnv?: NodeJS.ProcessEnv; codexShellEnvironmentPolicy?: string } | undefined;
+
+    try {
+      const result = await runCliAsync(
+        ['translate', 'enrich', '--text', 'workflow', '--backend', 'codex', '--json'],
+        '',
+        {
+          runAgent: async (options) => {
+            receivedOptions = options;
+            return {
+              operation: 'external-agent-run',
+              backend: 'codex',
+              command: 'codex',
+              args: ['exec'],
+              cwd: options.cwd ?? process.cwd(),
+              promptStdin: options.prompt,
+              dryRun: false,
+              exitCode: 0,
+              stdout: '{"translation":"工作流程","explanation":"a sequence of work"}',
+              stderr: '',
+            };
+          },
+        },
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(receivedOptions?.codexShellEnvironmentPolicy).toBe('none');
+      expect(receivedOptions?.spawnEnv).toMatchObject({ PATH: '/safe/bin' });
+      expect(receivedOptions?.spawnEnv).not.toHaveProperty('OPENAI_API_KEY');
+      expect(receivedOptions?.spawnEnv).not.toHaveProperty('ENGLISH_PILOT_HOME');
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+      if (previousSecret === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = previousSecret;
+    }
+  });
+
+  it('returns a structured error when agent output is malformed', async () => {
+    const result = await runCliAsync(
+      ['translate', 'enrich', '--text', 'workflow', '--backend', 'codex', '--json'],
+      '',
+      {
+        runAgent: async (options) => ({
+          operation: 'external-agent-run',
+          backend: 'codex',
+          command: 'codex',
+          args: ['exec'],
+          cwd: process.cwd(),
+          promptStdin: options.prompt,
+          dryRun: false,
+          exitCode: 0,
+          stdout: '```json\n{"translation":"工作流程"}\n```',
+          stderr: '',
+        }),
+      },
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      requestId: expect.any(String),
+      source: 'cli',
+      stage: 'agent',
+      status: 'error',
+      error: {
+        code: 'MALFORMED_AGENT_OUTPUT',
+      },
+    });
+  });
+
+  it('returns a structured error when the external agent fails', async () => {
+    const result = await runCliAsync(
+      ['translate', 'enrich', '--text', 'workflow', '--backend', 'codex', '--json'],
+      '',
+      {
+        runAgent: async (options) => ({
+          operation: 'external-agent-run',
+          backend: 'codex',
+          command: 'codex',
+          args: ['-p'],
+          cwd: process.cwd(),
+          promptStdin: options.prompt,
+          dryRun: false,
+          exitCode: 1,
+          stdout: '',
+          stderr: 'authentication failed',
+        }),
+      },
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      requestId: expect.any(String),
+      source: 'cli',
+      stage: 'agent',
+      status: 'error',
+      error: {
+        code: 'AGENT_FAILURE',
+        message: 'authentication failed',
+      },
+    });
+  });
+
+  it('preserves request validation codes for malformed enrichment JSON', async () => {
+    const malformed = await runCliAsync(
+      ['translate', 'enrich', '--request-json', '--backend', 'codex', '--json'],
+      '{not json',
+    );
+    const incomplete = await runCliAsync(
+      ['translate', 'enrich', '--request-json', '--backend', 'codex', '--json'],
+      JSON.stringify({ requestId: 'enrich-missing-source', text: 'workflow' }),
+    );
+
+    expect(JSON.parse(malformed.stdout)).toMatchObject({
+      stage: 'agent',
+      status: 'error',
+      error: { code: 'INVALID_REQUEST_JSON' },
+    });
+    expect(JSON.parse(incomplete.stdout)).toMatchObject({
+      requestId: 'enrich-missing-source',
+      stage: 'agent',
+      status: 'error',
+      error: { code: 'MISSING_REQUEST_FIELD' },
+    });
+  });
+
+  it('bounds raw request JSON before parsing and rejects invalid context types', async () => {
+    const oversized = await runCliAsync(
+      ['translate', 'enrich', '--request-json', '--backend', 'codex', '--json'],
+      'x'.repeat(12_289),
+    );
+    const invalidContext = await runCliAsync(
+      ['translate', 'enrich', '--request-json', '--backend', 'codex', '--json'],
+      JSON.stringify({
+        requestId: 'invalid-context',
+        text: 'workflow',
+        source: 'ghostty',
+        context: 42,
+      }),
+    );
+
+    expect(JSON.parse(oversized.stdout)).toMatchObject({
+      stage: 'agent',
+      status: 'error',
+      error: { code: 'TRANSLATION_REQUEST_JSON_TOO_LARGE' },
+    });
+    expect(JSON.parse(invalidContext.stdout)).toMatchObject({
+      requestId: 'invalid-context',
+      stage: 'agent',
+      status: 'error',
+      error: { code: 'INVALID_REQUEST_FIELD_TYPE' },
+    });
+  });
+
+  it('rejects invalid declared request field types before invoking the agent', async () => {
+    let invoked = false;
+    const result = await runCliAsync(
+      ['translate', 'enrich', '--request-json', '--backend', 'codex', '--json'],
+      JSON.stringify({
+        requestId: 42,
+        text: 'workflow',
+        source: 'ghostty',
+      }),
+      {
+        runAgent: async () => {
+          invoked = true;
+          throw new Error('agent should not be invoked');
+        },
+      },
+    );
+
+    expect(invoked).toBe(false);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      stage: 'agent',
+      status: 'error',
+      error: { code: 'INVALID_REQUEST_FIELD_TYPE' },
+    });
+  });
+
+  it('rejects oversized enrichment input before invoking the agent', async () => {
+    let invoked = false;
+    const result = await runCliAsync(
+      ['translate', 'enrich', '--text', 'x'.repeat(4_001), '--backend', 'codex', '--json'],
+      '',
+      {
+        runAgent: async () => {
+          invoked = true;
+          throw new Error('must not invoke oversized enrichment');
+        },
+      },
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(invoked).toBe(false);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      stage: 'agent',
+      status: 'error',
+      error: { code: 'TRANSLATION_REQUEST_FIELD_TOO_LARGE' },
+    });
+  });
+
+  it('bounds every request-json field before invoking the agent', async () => {
+    const cases = [
+      { requestId: 'x'.repeat(129), text: 'workflow', source: 'ghostty' },
+      { requestId: 'request-1', text: 'workflow', source: 'x'.repeat(129) },
+      { requestId: 'request-2', text: 'workflow', source: 'ghostty', context: 'x'.repeat(4_001) },
+    ];
+
+    for (const request of cases) {
+      let invoked = false;
+      const result = await runCliAsync(
+        ['translate', 'enrich', '--request-json', '--backend', 'codex', '--json'],
+        JSON.stringify(request),
+        {
+          runAgent: async () => {
+            invoked = true;
+            throw new Error('must not invoke oversized enrichment');
+          },
+        },
+      );
+
+      expect(result.exitCode).toBe(1);
+      expect(invoked).toBe(false);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        stage: 'agent',
+        status: 'error',
+        error: { code: 'TRANSLATION_REQUEST_FIELD_TOO_LARGE' },
+      });
+    }
+
+    const contextOverflow = JSON.parse(
+      (
+        await runCliAsync(
+          ['translate', 'enrich', '--request-json', '--backend', 'codex', '--json'],
+          JSON.stringify({
+            requestId: 'request-context',
+            text: 'workflow',
+            source: 'ghostty',
+            context: 'x'.repeat(4_001),
+          }),
+        )
+      ).stdout,
+    );
+    expect(contextOverflow).toMatchObject({
+      requestId: 'request-context',
+      source: 'ghostty',
+      error: { code: 'TRANSLATION_REQUEST_FIELD_TOO_LARGE' },
+    });
+  });
+
+  it('rejects oversized agent output with a stable size-limit code', async () => {
+    let maxOutputBytes: number | undefined;
+    const result = await runCliAsync(
+      ['translate', 'enrich', '--text', 'workflow', '--backend', 'codex', '--json'],
+      '',
+      {
+        runAgent: async (options) => {
+          maxOutputBytes = options.maxOutputBytes;
+          return {
+            operation: 'external-agent-run',
+            backend: 'codex',
+            command: 'codex',
+            args: ['exec'],
+            cwd: process.cwd(),
+            promptStdin: options.prompt,
+            dryRun: false,
+            exitCode: 0,
+            stdout: 'x'.repeat(16_385),
+            stderr: '',
+          };
+        },
+      },
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(maxOutputBytes).toBe(16_384);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      stage: 'agent',
+      status: 'error',
+      error: { code: 'TRANSLATION_AGENT_OUTPUT_TOO_LARGE' },
+    });
+  });
+
+  it('cleans the enrichment cwd after success, failure, and dry-run', async () => {
+    const cases = [
+      {
+        label: 'success',
+        dryRun: false,
+        exitCode: 0,
+        stdout: '{"translation":"x","explanation":"y"}',
+        stderr: '',
+      },
+      { label: 'failure', dryRun: false, exitCode: 1, stdout: '', stderr: 'failed' },
+      { label: 'timeout', dryRun: false, exitCode: null, stdout: '', stderr: '', signal: 'SIGTERM' as const },
+      {
+        label: 'output-limit',
+        dryRun: false,
+        exitCode: null,
+        stdout: '',
+        stderr: '',
+        signal: 'SIGTERM' as const,
+        outputLimitExceeded: true,
+      },
+      { label: 'dry-run', dryRun: true, exitCode: 0, stdout: '', stderr: '' },
+    ];
+
+    for (const agentResult of cases) {
+      let cwd = '';
+      const result = await runCliAsync(
+        ['translate', 'enrich', '--text', 'workflow', '--backend', 'codex', '--json'],
+        '',
+        {
+          runAgent: async (options) => {
+            cwd = options.cwd ?? '';
+            expect(existsSync(cwd)).toBe(true);
+            return {
+              operation: 'external-agent-run',
+              backend: 'codex',
+              command: 'codex',
+              args: ['exec'],
+              cwd,
+              promptStdin: options.prompt,
+              dryRun: agentResult.dryRun,
+              exitCode: agentResult.exitCode,
+              stdout: agentResult.stdout,
+              stderr: agentResult.stderr,
+              ...(agentResult.signal ? { signal: agentResult.signal } : {}),
+              ...(agentResult.outputLimitExceeded ? { outputLimitExceeded: true } : {}),
+            };
+          },
+        },
+      );
+
+      expect(result.exitCode, agentResult.label).toBe(agentResult.dryRun ? 0 : agentResult.exitCode === 0 ? 0 : 1);
+      expect(existsSync(cwd)).toBe(false);
+    }
+  });
+
+  it('cleans the enrichment cwd when SIGTERM is ignored and SIGKILL closes the child', async () => {
+    let cwd = '';
+    let callbackCount = 0;
+    let cwdExistsAfterRunner = false;
+    const result = await runCliAsync(
+      ['translate', 'enrich', '--text', 'workflow', '--backend', 'codex', '--json'],
+      '',
+      {
+        runAgent: async (options) => {
+          cwd = options.cwd ?? '';
+          const result = await runExternalAgent({
+            ...options,
+            timeoutMs: 5,
+            spawnProcess: fakeIgnoringSigtermSpawn,
+            onChildTermination: () => {
+              callbackCount += 1;
+              options.onChildTermination?.();
+            },
+          });
+          cwdExistsAfterRunner = existsSync(cwd);
+          return result;
+        },
+      },
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(callbackCount).toBe(1);
+    expect(cwdExistsAfterRunner).toBe(false);
+    expect(cwd).not.toBe('');
+    expect(existsSync(cwd)).toBe(false);
+  });
+
+  it('cleans the enrichment cwd when process creation rejects before a child exists', async () => {
+    let cwd = '';
+    const result = await runCliAsync(
+      ['translate', 'enrich', '--text', 'workflow', '--backend', 'codex', '--json'],
+      '',
+      {
+        runAgent: async (options) => {
+          cwd = options.cwd ?? '';
+          return runExternalAgent({
+            ...options,
+            spawnProcess: () => {
+              throw new Error('invalid codex binary');
+            },
+          });
+        },
+      },
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      stage: 'agent',
+      status: 'error',
+      error: { code: 'TRANSLATION_ENRICHMENT_ERROR' },
+    });
+    expect(cwd).not.toBe('');
+    expect(existsSync(cwd)).toBe(false);
   });
 
   it('prints and writes a reusable MCP client config', () => {
@@ -2777,3 +3509,22 @@ function jsonResponse(body: unknown) {
     text: async () => JSON.stringify(body),
   };
 }
+
+const fakeIgnoringSigtermSpawn = ((..._args: unknown[]) => {
+  const listeners = new Map<string, Array<(...eventArgs: unknown[]) => void>>();
+  const child = {
+    stdout: { on: () => undefined },
+    stderr: { on: () => undefined },
+    stdin: { end: () => undefined },
+    kill: (signal: NodeJS.Signals) => {
+      if (signal === 'SIGKILL') {
+        for (const listener of listeners.get('close') ?? []) listener(null, 'SIGKILL');
+      }
+      return true;
+    },
+    on: (event: string, listener: (...eventArgs: unknown[]) => void) => {
+      listeners.set(event, [...(listeners.get(event) ?? []), listener]);
+    },
+  };
+  return child;
+}) as never;

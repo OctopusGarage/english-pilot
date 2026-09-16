@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { spawn as spawnFunction } from 'node:child_process';
 import {
   buildExternalAgentInvocation,
   extractExternalAgentReplyText,
@@ -8,6 +9,10 @@ import {
 import { defaultConfig } from '../../src/core/policy.js';
 
 describe('external agent runner', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('builds a Claude prompt invocation that sends the prompt through stdin', () => {
     const invocation = buildExternalAgentInvocation({
       config: {
@@ -92,6 +97,20 @@ describe('external agent runner', () => {
     ]);
   });
 
+  it('can disable Codex shell environment inheritance for isolated runs', () => {
+    const invocation = buildExternalAgentInvocation({
+      config: {
+        ...defaultConfig,
+        externalAgentBackend: 'codex',
+      },
+      prompt: 'Enrich this translation.',
+      cwd: '/tmp/translation-enrichment',
+      codexShellEnvironmentPolicy: 'none',
+    });
+
+    expect(invocation.args).toContain('shell_environment_policy.inherit="none"');
+  });
+
   it('builds a Codex resume invocation when a thread id is provided', () => {
     const invocation = buildExternalAgentInvocation({
       config: {
@@ -172,6 +191,28 @@ describe('external agent runner', () => {
     });
   });
 
+  it('notifies termination when process creation throws before a child exists', async () => {
+    let callbackCount = 0;
+
+    await expect(
+      runExternalAgent({
+        config: {
+          ...defaultConfig,
+          externalAgentBackend: 'codex',
+        },
+        prompt: 'Hello',
+        onChildTermination: () => {
+          callbackCount += 1;
+        },
+        spawnProcess: () => {
+          throw new Error('invalid codex binary');
+        },
+      }),
+    ).rejects.toThrow('invalid codex binary');
+
+    expect(callbackCount).toBe(1);
+  });
+
   it('reports a timed-out agent process and terminates it', async () => {
     let signal: NodeJS.Signals | undefined;
     const result = await runExternalAgent({
@@ -192,6 +233,82 @@ describe('external agent runner', () => {
       stderr: 'External agent timed out after 5ms.\n',
     });
     expect(signal).toBe('SIGTERM');
+  });
+
+  it('escalates a child that ignores SIGTERM and resolves after SIGKILL', async () => {
+    vi.useFakeTimers();
+    const signals: NodeJS.Signals[] = [];
+    let callbackCount = 0;
+    const resultPromise = runExternalAgent({
+      config: {
+        ...defaultConfig,
+        externalAgentBackend: 'claude',
+      },
+      prompt: 'Hello',
+      timeoutMs: 5,
+      waitForChildCloseAfterTermination: true,
+      onChildTermination: () => {
+        callbackCount += 1;
+      },
+      spawnProcess: fakeSpawnWithoutClose((signal) => {
+        signals.push(signal);
+      }, true),
+    });
+
+    await vi.advanceTimersByTimeAsync(105);
+    const result = await resultPromise;
+
+    expect(signals).toEqual(['SIGTERM', 'SIGKILL']);
+    expect(result.signal).toBe('SIGKILL');
+    expect(callbackCount).toBe(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('does not leak the termination grace timer when SIGTERM closes synchronously', async () => {
+    vi.useFakeTimers();
+    const resultPromise = runExternalAgent({
+      config: {
+        ...defaultConfig,
+        externalAgentBackend: 'claude',
+      },
+      prompt: 'Hello',
+      timeoutMs: 5,
+      waitForChildCloseAfterTermination: true,
+      spawnProcess: fakeSpawn([], undefined, true, false),
+    });
+    await vi.advanceTimersByTimeAsync(5);
+    const result = await resultPromise;
+
+    expect(result.signal).toBe('SIGTERM');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('resolves a final SIGKILL-not-sent state when the child is already gone', async () => {
+    vi.useFakeTimers();
+    let callbackCount = 0;
+    const resultPromise = runExternalAgent({
+      config: {
+        ...defaultConfig,
+        externalAgentBackend: 'claude',
+      },
+      prompt: 'Hello',
+      timeoutMs: 5,
+      waitForChildCloseAfterTermination: true,
+      onChildTermination: () => {
+        callbackCount += 1;
+      },
+      spawnProcess: fakeSpawnWithoutClose(() => undefined, false, true),
+    });
+
+    await vi.advanceTimersByTimeAsync(105);
+    const result = await resultPromise;
+
+    expect(result).toMatchObject({
+      signal: 'SIGKILL',
+      terminationFailure: 'SIGKILL_NOT_SENT',
+    });
+    expect(callbackCount).toBe(1);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('formats command, output, and stderr for a human-readable run report', () => {
@@ -246,6 +363,103 @@ describe('external agent runner', () => {
       threadId: 'codex-thread-2',
     });
     expect(codex).not.toHaveProperty('sessionId');
+  });
+
+  it('terminates an agent when bounded output exceeds the configured limit', async () => {
+    let killedWith: NodeJS.Signals | undefined;
+    const result = await runExternalAgent({
+      config: {
+        ...defaultConfig,
+        externalAgentBackend: 'codex',
+      },
+      prompt: 'Hello',
+      maxOutputBytes: 8,
+      spawnProcess: fakeSpawn(['123456789'], (signal) => {
+        killedWith = signal;
+      }),
+    });
+
+    expect(result).toMatchObject({
+      exitCode: null,
+      outputLimitExceeded: true,
+      signal: 'SIGTERM',
+    });
+    expect(killedWith).toBe('SIGTERM');
+    expect(Buffer.byteLength(result.stdout, 'utf8')).toBeLessThanOrEqual(8);
+  });
+
+  it('keeps bounded multibyte output valid UTF-8 and within the cap', async () => {
+    const result = await runExternalAgent({
+      config: {
+        ...defaultConfig,
+        externalAgentBackend: 'codex',
+      },
+      prompt: 'Hello',
+      maxOutputBytes: 4,
+      spawnProcess: fakeSpawn(['ab中']),
+    });
+
+    expect(result.outputLimitExceeded).toBe(true);
+    expect(result.stdout).toBe('ab');
+    expect(Buffer.byteLength(result.stdout, 'utf8')).toBeLessThanOrEqual(4);
+    expect(result.stdout).not.toContain('\uFFFD');
+  });
+
+  it('keeps timeout diagnostics within the output cap', async () => {
+    const result = await runExternalAgent({
+      config: {
+        ...defaultConfig,
+        externalAgentBackend: 'codex',
+      },
+      prompt: 'Hello',
+      maxOutputBytes: 4,
+      timeoutMs: 10,
+      spawnProcess: fakeSpawn([], undefined, false, false),
+    });
+
+    expect(result.signal).toBe('SIGTERM');
+    expect(Buffer.byteLength(result.stdout, 'utf8')).toBeLessThanOrEqual(4);
+    expect(Buffer.byteLength(result.stderr, 'utf8')).toBeLessThanOrEqual(4);
+  });
+
+  it('can wait for a terminated child to close before resolving', async () => {
+    const result = await runExternalAgent({
+      config: {
+        ...defaultConfig,
+        externalAgentBackend: 'codex',
+      },
+      prompt: 'Hello',
+      maxOutputBytes: 4,
+      waitForChildCloseAfterTermination: true,
+      spawnProcess: fakeSpawn(['123456789'], undefined, true),
+    });
+
+    expect(result.outputLimitExceeded).toBe(true);
+    expect(result.signal).toBe('SIGTERM');
+  });
+
+  it('passes an explicit spawn environment without inheriting the parent environment', async () => {
+    let spawnOptions: { env?: NodeJS.ProcessEnv } | undefined;
+    const result = await runExternalAgent({
+      config: {
+        ...defaultConfig,
+        externalAgentBackend: 'codex',
+      },
+      prompt: 'Hello',
+      spawnEnv: {
+        PATH: '/usr/bin',
+        HOME: '/tmp/home',
+      },
+      spawnProcess: fakeSpawn([], undefined, false, true, (options) => {
+        spawnOptions = options;
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(spawnOptions?.env).toEqual({
+      PATH: '/usr/bin',
+      HOME: '/tmp/home',
+    });
   });
 
   it('does not duplicate identical Claude assistant and result text from JSONL output', () => {
@@ -308,8 +522,15 @@ describe('external agent runner', () => {
   });
 });
 
-function fakeSpawn(stdoutChunks: string[]) {
-  return () => {
+function fakeSpawn(
+  stdoutChunks: string[],
+  onKill?: (signal: NodeJS.Signals) => void,
+  closeOnKill = false,
+  closeOnStdin = true,
+  onSpawn?: (options: { env?: NodeJS.ProcessEnv }) => void,
+) {
+  return ((_command: string, _args: string[], options: { env?: NodeJS.ProcessEnv }) => {
+    onSpawn?.(options);
     const listeners = new Map<string, Array<(...args: unknown[]) => void>>();
     const stdoutListeners = new Map<string, Array<(chunk: Buffer) => void>>();
     const stderrListeners = new Map<string, Array<(chunk: Buffer) => void>>();
@@ -326,6 +547,7 @@ function fakeSpawn(stdoutChunks: string[]) {
       },
       stdin: {
         end: () => {
+          if (!closeOnStdin) return;
           queueMicrotask(() => {
             for (const chunk of stdoutChunks) {
               for (const listener of stdoutListeners.get('data') ?? []) listener(Buffer.from(chunk));
@@ -334,13 +556,19 @@ function fakeSpawn(stdoutChunks: string[]) {
           });
         },
       },
-      kill: () => true,
+      kill: (signal: NodeJS.Signals) => {
+        onKill?.(signal);
+        if (closeOnKill) {
+          for (const listener of listeners.get('close') ?? []) listener(null, 'SIGTERM');
+        }
+        return true;
+      },
       on: (event: string, listener: (...args: unknown[]) => void) => {
         listeners.set(event, [...(listeners.get(event) ?? []), listener]);
       },
     };
     return child as never;
-  };
+  }) as unknown as typeof spawnFunction;
 }
 
 function fakeSpawnError(error: Error) {
@@ -365,17 +593,27 @@ function fakeSpawnError(error: Error) {
   };
 }
 
-function fakeSpawnWithoutClose(onKill: (signal: NodeJS.Signals) => void) {
+function fakeSpawnWithoutClose(
+  onKill: (signal: NodeJS.Signals) => void,
+  closeOnSigkill = false,
+  sigkillReturnsFalse = false,
+) {
   return () => {
+    const listeners = new Map<string, Array<(...args: unknown[]) => void>>();
     const child = {
       stdout: { on: () => undefined },
       stderr: { on: () => undefined },
       stdin: { end: () => undefined },
       kill: (signal: NodeJS.Signals) => {
         onKill(signal);
-        return true;
+        if (closeOnSigkill && signal === 'SIGKILL') {
+          for (const listener of listeners.get('close') ?? []) listener(null, 'SIGKILL');
+        }
+        return !(sigkillReturnsFalse && signal === 'SIGKILL');
       },
-      on: () => undefined,
+      on: (event: string, listener: (...args: unknown[]) => void) => {
+        listeners.set(event, [...(listeners.get(event) ?? []), listener]);
+      },
     };
     return child as never;
   };

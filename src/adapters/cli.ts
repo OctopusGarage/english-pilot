@@ -28,6 +28,7 @@ import { runDaily, runReview } from './cli-review.js';
 import { runService } from './cli-service.js';
 import { runSetup } from './cli-setup.js';
 import type { CliAsyncOptions, CliResult } from './cli-types.js';
+import { runTranslate, runTranslateAsync } from './cli-translation.js';
 import { runVoice, runVoiceAsync } from './cli-voice.js';
 import { helpText } from './cli-help.js';
 import { serveMcpStdio } from './mcp-stdio.js';
@@ -53,6 +54,7 @@ export function runCli(argv: string[], stdin = ''): CliResult {
   if (command === 'gate') return runGate(args);
   if (command === 'config') return runConfig(args);
   if (command === 'mcp') return runMcp(args);
+  if (command === 'translate') return runTranslate(args, stdin);
   if (command === 'review') return runReview(args);
   if (command === 'coach') return runCoach(args, stdin);
   if (command === 'pronounce') return runPronounce(args, stdin);
@@ -107,6 +109,9 @@ export async function runCliAsync(argv: string[], stdin = '', options: CliAsyncO
   if (command === 'agent' && args[0] === 'run') {
     return runAgentRunAsync(args, stdin);
   }
+  if (command === 'translate' && args[0] === 'enrich') {
+    return runTranslateAsync(args.slice(1), stdin, options.runAgent);
+  }
   if (command === 'voice' && (args[0] === 'transcribe' || args[0] === 'practice')) {
     return runVoiceAsync(args, options);
   }
@@ -114,6 +119,10 @@ export async function runCliAsync(argv: string[], stdin = '', options: CliAsyncO
     return runEvalAsync(args);
   }
   return runCli(argv, stdin);
+}
+
+export function shouldReadCliStdin(argv: string[]): boolean {
+  return argv.includes('--stdin') || argv.includes('--request-json');
 }
 
 export async function runCliFromProcess(): Promise<void> {
@@ -126,7 +135,7 @@ export async function runCliFromProcess(): Promise<void> {
     process.env.NODE_NO_WARNINGS = process.env.NODE_NO_WARNINGS || '1';
   }
 
-  const stdin = process.argv.includes('--stdin') ? readFileSync(0, 'utf8') : '';
+  const stdin = shouldReadCliStdin(process.argv) ? readFileSync(0, 'utf8') : '';
   const result = await runCliAsync(process.argv.slice(2), stdin);
   if (result.stdout) process.stdout.write(result.stdout);
   if (result.stderr) process.stderr.write(result.stderr);

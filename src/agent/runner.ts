@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { StringDecoder } from 'node:string_decoder';
 import type { EnglishPilotConfig } from '../core/types.js';
 import { getExternalAgentBackendAdapter } from './backend-adapters.js';
 import type {
@@ -38,7 +39,15 @@ export async function runExternalAgent(options: ExternalAgentRunOptions): Promis
   }
 
   const timeoutMs = options.timeoutMs ?? options.config.externalAgentTimeoutMs;
-  return spawnExternalAgent(invocation, timeoutMs, options.spawnProcess ?? spawn);
+  return spawnExternalAgent(
+    invocation,
+    timeoutMs,
+    options.spawnProcess ?? spawn,
+    options.maxOutputBytes,
+    options.waitForChildCloseAfterTermination,
+    options.spawnEnv,
+    options.onChildTermination,
+  );
 }
 
 export function formatExternalAgentRunResult(result: ExternalAgentRunResult): string {
@@ -78,68 +87,159 @@ function spawnExternalAgent(
   invocation: ExternalAgentInvocation,
   timeoutMs: number,
   spawnProcess: typeof spawn,
+  maxOutputBytes?: number,
+  waitForChildCloseAfterTermination = false,
+  spawnEnv?: NodeJS.ProcessEnv,
+  onChildTermination?: () => void,
 ): Promise<ExternalAgentRunResult> {
-  return new Promise((resolve) => {
-    const child = spawnProcess(invocation.command, invocation.args, {
-      cwd: invocation.cwd,
-      stdio: 'pipe',
-      shell: false,
-    }) as ExternalAgentChildProcess;
+  return new Promise((resolve, reject) => {
+    let childTerminationNotified = false;
+    const notifyChildTermination = () => {
+      if (childTerminationNotified) return;
+      childTerminationNotified = true;
+      onChildTermination?.();
+    };
+    let child: ExternalAgentChildProcess;
+    try {
+      child = spawnProcess(invocation.command, invocation.args, {
+        cwd: invocation.cwd,
+        stdio: 'pipe',
+        shell: false,
+        ...(spawnEnv ? { env: spawnEnv } : {}),
+      }) as ExternalAgentChildProcess;
+    } catch (error) {
+      notifyChildTermination();
+      reject(error);
+      return;
+    }
     let stdout = '';
     let stderr = '';
+    let outputBytes = 0;
     let settled = false;
-    const timer = setTimeout(() => {
+    let terminatedResult: ExternalAgentRunResult | undefined;
+    let terminationSignal: NodeJS.Signals = 'SIGTERM';
+    let terminationGraceTimer: ReturnType<typeof setTimeout> | undefined;
+    const stdoutDecoder = maxOutputBytes === undefined ? undefined : new StringDecoder('utf8');
+    const stderrDecoder = maxOutputBytes === undefined ? undefined : new StringDecoder('utf8');
+    const resolveResult = (result: ExternalAgentRunResult) => {
+      if (settled) return;
       settled = true;
+      clearTimeout(timer);
+      if (terminationGraceTimer) clearTimeout(terminationGraceTimer);
+      resolve(withExtractedConversationIds(result));
+    };
+    const terminateWithResult = (result: ExternalAgentRunResult) => {
+      if (!waitForChildCloseAfterTermination) {
+        child.kill('SIGTERM');
+        resolveResult(result);
+        return;
+      }
+      terminatedResult = result;
+      terminationGraceTimer = setTimeout(() => {
+        if (settled || !terminatedResult) return;
+        terminationSignal = 'SIGKILL';
+        const killSent = child.kill('SIGKILL');
+        if (!killSent) {
+          // Node reports false when the process is already gone; no close event
+          // can arrive, so this is the final state that permits cleanup.
+          resolveResult({
+            ...terminatedResult,
+            signal: terminationSignal,
+            terminationFailure: 'SIGKILL_NOT_SENT',
+          });
+          notifyChildTermination();
+        }
+      }, 100);
       child.kill('SIGTERM');
-      resolve(
-        withExtractedConversationIds({
-          operation: 'external-agent-run',
-          ...invocation,
-          dryRun: false,
-          exitCode: null,
-          signal: 'SIGTERM',
-          stdout,
-          stderr: `${stderr}${stderr.endsWith('\n') || stderr.length === 0 ? '' : '\n'}External agent timed out after ${timeoutMs}ms.\n`,
-        }),
-      );
+    };
+    const boundedStderr = (message: string) => {
+      if (maxOutputBytes === undefined) return `${stderr}${message}`;
+      const remaining = Math.max(0, maxOutputBytes - outputBytes);
+      if (remaining === 0) return stderr;
+      const decoder = new StringDecoder('utf8');
+      return `${stderr}${decoder.write(Buffer.from(message, 'utf8').subarray(0, remaining))}`;
+    };
+    const timer = setTimeout(() => {
+      terminateWithResult({
+        operation: 'external-agent-run',
+        ...invocation,
+        dryRun: false,
+        exitCode: null,
+        signal: 'SIGTERM',
+        stdout,
+        stderr: boundedStderr(
+          `${stderr.endsWith('\n') || stderr.length === 0 ? '' : '\n'}External agent timed out after ${timeoutMs}ms.\n`,
+        ),
+      });
     }, timeoutMs);
 
-    child.stdout.on('data', (chunk: Buffer) => {
-      stdout += chunk.toString('utf8');
-    });
-    child.stderr.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString('utf8');
-    });
-    child.on('error', (error) => {
+    const stopForOutputLimit = () => {
       if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve(
-        withExtractedConversationIds({
-          operation: 'external-agent-run',
-          ...invocation,
-          dryRun: false,
-          exitCode: 1,
-          stdout,
-          stderr: `${stderr}${error.message}\n`,
-        }),
-      );
+      terminateWithResult({
+        operation: 'external-agent-run',
+        ...invocation,
+        dryRun: false,
+        exitCode: null,
+        signal: 'SIGTERM',
+        stdout,
+        stderr,
+        outputLimitExceeded: true,
+      });
+    };
+    const appendOutput = (target: 'stdout' | 'stderr', chunk: Buffer) => {
+      if (settled || terminatedResult) return;
+      if (maxOutputBytes === undefined) {
+        if (target === 'stdout') stdout += chunk.toString('utf8');
+        else stderr += chunk.toString('utf8');
+        return;
+      }
+      const chunkBytes = chunk.byteLength;
+      const remaining = maxOutputBytes - outputBytes;
+      if (remaining <= 0) {
+        stopForOutputLimit();
+        return;
+      }
+      const accepted = chunk.subarray(0, remaining);
+      outputBytes += accepted.byteLength;
+      const decoded = target === 'stdout' ? stdoutDecoder?.write(accepted) : stderrDecoder?.write(accepted);
+      if (target === 'stdout') stdout += decoded ?? '';
+      else stderr += decoded ?? '';
+      if (maxOutputBytes !== undefined && chunkBytes > accepted.byteLength) stopForOutputLimit();
+    };
+    child.stdout.on('data', (chunk: Buffer) => appendOutput('stdout', chunk));
+    child.stderr.on('data', (chunk: Buffer) => appendOutput('stderr', chunk));
+    child.on('error', (error) => {
+      if (settled || terminatedResult) return;
+      resolveResult({
+        operation: 'external-agent-run',
+        ...invocation,
+        dryRun: false,
+        exitCode: 1,
+        stdout,
+        stderr: boundedStderr(`${error.message}\n`),
+      });
+      notifyChildTermination();
     });
     child.on('close', (code, signal) => {
+      if (terminatedResult) {
+        resolveResult({
+          ...terminatedResult,
+          signal: terminationSignal,
+        });
+        notifyChildTermination();
+        return;
+      }
       if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve(
-        withExtractedConversationIds({
-          operation: 'external-agent-run',
-          ...invocation,
-          dryRun: false,
-          exitCode: code,
-          signal,
-          stdout,
-          stderr,
-        }),
-      );
+      resolveResult({
+        operation: 'external-agent-run',
+        ...invocation,
+        dryRun: false,
+        exitCode: code,
+        signal,
+        stdout,
+        stderr,
+      });
+      notifyChildTermination();
     });
 
     child.stdin.end(invocation.promptStdin);
