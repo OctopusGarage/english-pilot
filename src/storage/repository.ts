@@ -12,6 +12,7 @@ import {
   type LearningItemDraft,
   type LearningItemUpdate,
 } from '../core/learning-card.js';
+import { assessLearningItemQuality, classifyRetention, STALE_NEVER_REVIEWED_DAYS } from '../core/review-quality.js';
 import {
   formatLearningItemsMarkdown,
   formatLearningItemsObsidianFiles,
@@ -48,6 +49,7 @@ interface StorageAdapter {
   listLearningItems(): LearningItem[];
   updateLearningItemReview(item: LearningItem): void;
   deleteLearningItem(id: string): void;
+  deleteLearningItems(ids: string[]): void;
   updateLearningItemFields(item: LearningItem): void;
 }
 
@@ -77,9 +79,10 @@ export function listPromptEvents(): PromptEvent[] {
   return storageAdapter().listPromptEvents();
 }
 
-export function recordLearningItem(item: LearningItemDraft): LearningItem {
+export function recordLearningItem(item: LearningItemDraft): LearningItem | undefined {
   const existing = findDuplicateLearningItem(listLearningItems(), item);
   if (existing) return existing;
+  if (!assessLearningItemQuality(item).accepted) return undefined;
 
   const stored = buildInitialLearningItem({ draft: item, id: createId('learn') });
   storageAdapter().insertLearningItem(stored);
@@ -107,6 +110,34 @@ export function removeLearningItem(id: string): LearningItem | undefined {
 
   storageAdapter().deleteLearningItem(id);
   return item;
+}
+
+export interface LearningItemCleanupSummary {
+  examined: number;
+  lowQualityDeleted: number;
+  staleDeleted: number;
+  protected: number;
+  remaining: number;
+}
+
+export function cleanupLearningItems(date: string): LearningItemCleanupSummary {
+  const items = listLearningItems();
+  const decisions = items.map((item) => ({ item, decision: classifyRetention(item, date) }));
+  const lowQualityDeleted = decisions.filter(({ decision }) => decision === 'low-quality').length;
+  const staleDeleted = decisions.filter(({ decision }) => decision === 'stale-never-reviewed').length;
+  const deletedIds = decisions.filter(({ decision }) => decision !== 'keep').map(({ item }) => item.id);
+  const protectedCount = decisions.filter(
+    ({ item, decision }) => decision === 'keep' && isAgeProtected(item, date),
+  ).length;
+
+  storageAdapter().deleteLearningItems(deletedIds);
+  return {
+    examined: items.length,
+    lowQualityDeleted,
+    staleDeleted,
+    protected: protectedCount,
+    remaining: items.length - deletedIds.length,
+  };
 }
 
 export function updateLearningItem(id: string, update: LearningItemUpdate): LearningItem | undefined {
@@ -171,6 +202,11 @@ const jsonlStorageAdapter: StorageAdapter = {
   },
   deleteLearningItem(id) {
     writeLearningItems(jsonlStorageAdapter.listLearningItems().filter((candidate) => candidate.id !== id));
+  },
+  deleteLearningItems(ids) {
+    if (ids.length === 0) return;
+    const deleted = new Set(ids);
+    writeLearningItems(jsonlStorageAdapter.listLearningItems().filter((candidate) => !deleted.has(candidate.id)));
   },
   updateLearningItemFields(item) {
     writeLearningItems(
@@ -306,6 +342,20 @@ const sqliteStorageAdapter: StorageAdapter = {
   deleteLearningItem(id) {
     withDatabase((db) => {
       db.prepare('delete from learning_items where id = ?').run(id);
+    });
+  },
+  deleteLearningItems(ids) {
+    if (ids.length === 0) return;
+    withDatabase((db) => {
+      db.exec('begin immediate;');
+      try {
+        const statement = db.prepare('delete from learning_items where id = ?');
+        for (const id of ids) statement.run(id);
+        db.exec('commit;');
+      } catch (error) {
+        db.exec('rollback;');
+        throw error;
+      }
     });
   },
   updateLearningItemFields(item) {
@@ -504,6 +554,13 @@ function normalizeLearningItem(item: LearningItem): LearningItem {
     ...item,
     ...scheduling,
   };
+}
+
+function isAgeProtected(item: LearningItem, date: string): boolean {
+  if (item.reviewCount === 0 && !item.lastReviewedAt) return false;
+  const createdDay = Date.parse(`${item.createdAt.slice(0, 10)}T00:00:00.000Z`);
+  const reviewDay = Date.parse(`${date}T00:00:00.000Z`);
+  return item.nextReviewAt <= date && Math.floor((reviewDay - createdDay) / 86_400_000) >= STALE_NEVER_REVIEWED_DAYS;
 }
 
 function parseTags(value: unknown): string[] {

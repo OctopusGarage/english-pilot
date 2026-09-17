@@ -22,7 +22,7 @@ export function buildIntegrationEventCoaching(input: {
   event: unknown;
   allowedTerms?: string[];
   record?: boolean;
-  recordLearningItem?: (draft: LearningItemDraft) => LearningItem;
+  recordLearningItem?: (draft: LearningItemDraft) => LearningItem | undefined;
 }): IntegrationEventCoachingResult {
   const event = normalizeInboundMessageEvent(input.target, input.event);
   const coaching = buildIntegrationMessageCoachingPayload(input.target, event.text, input.allowedTerms ?? []);

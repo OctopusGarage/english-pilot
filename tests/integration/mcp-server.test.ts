@@ -855,7 +855,12 @@ describe('MCP tools', () => {
   });
 
   it('removes and cleans up review items through MCP', () => {
-    const noisy = handleMcpToolCall('english_record_learning_item', {
+    const legacySeed = handleMcpToolCall('english_record_learning_item', {
+      original: 'Please help me rewrite this technical request clearly.',
+      suggested: 'Please rewrite this technical request in clear English.',
+    }) as { item: { id: string } };
+    handleMcpToolCall('english_update_review_item', {
+      id: legacySeed.item.id,
       original: [
         'You are a spec compliance reviewer for Task 5 only. Do not edit files.',
         'Review /workspace/project and keep the sentence “从 L3 到 L4 的跨越”.',
@@ -864,7 +869,8 @@ describe('MCP tools', () => {
         '- Report APPROVED or CHANGES_REQUESTED.',
       ].join('\n'),
       suggested: 'Please rewrite this mainly in English while preserving the original intent.',
-    }) as { item: { id: string } };
+    });
+    const noisy = legacySeed;
     const useful = handleMcpToolCall('english_record_learning_item', {
       original: '我想创建一个 new project，用来辅助英语学习。',
       suggested: 'I want to create a new project to help me learn and use English during my normal AI conversations.',

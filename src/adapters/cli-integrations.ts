@@ -38,7 +38,7 @@ import {
 } from '../integrations/validation-history.js';
 import { listGlossaryEntries } from '../core/glossary.js';
 import { isDateKey } from '../core/review-schedule.js';
-import { listLearningItems, recordLearningItem } from '../storage/repository.js';
+import { cleanupLearningItems, listLearningItems, recordLearningItem } from '../storage/repository.js';
 import { createControlClient } from './control/client.js';
 import type { CliAsyncOptions, CliResult } from './cli-types.js';
 import type { WeChatDailyReviewDaemonDeliveryResult } from './control/protocol.js';
@@ -399,7 +399,8 @@ export async function runIntegrationDeliver(args: string[], options: CliAsyncOpt
   if (target.id === 'feishu') {
     const result = await deliverFeishuDailyReview({
       date,
-      items: listLearningItems(),
+      cleanupItems: cleanupLearningItems,
+      loadItems: listLearningItems,
       env: options.env,
     });
     return {
@@ -446,6 +447,16 @@ function formatFeishuDailyReviewDelivery(result: Awaited<ReturnType<typeof deliv
     `Network: ${result.network ? 'yes, through tmux-claude-bot notify' : 'no'}`,
     `Messages: ${result.messagesSent}/${result.messageCount}`,
     `Session: ${result.session}`,
+    ...(result.cleanup
+      ? [
+          `Cleanup: ${result.cleanup.lowQualityDeleted} low-quality, ${result.cleanup.staleDeleted} stale, ${result.cleanup.remaining} remaining`,
+        ]
+      : []),
+    ...(result.selection
+      ? [
+          `Selection: ${result.selection.counts.recent} recent, ${result.selection.counts.reviewed} reviewed, ${result.selection.counts.backlog} backlog`,
+        ]
+      : []),
     `Preview: ${result.messagePreview}`,
     ...(result.blocker ? [`Blocker: ${result.blocker}`] : []),
     ...(result.errors?.length ? ['Errors:', ...result.errors.map((error) => `- ${error}`)] : []),

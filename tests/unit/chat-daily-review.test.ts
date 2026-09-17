@@ -28,7 +28,7 @@ describe('buildChatDailyReviewMessages', () => {
 
     expect(messages).toHaveLength(1);
     expect(messages[0]).toContain('EnglishPilot Daily Review - 2026-09-04');
-    expect(messages[0]).toContain('Due: 2 | Selected: 1');
+    expect(messages[0]).toContain('Eligible: 1 | Recent: 1 | Reviewed: 0 | Backlog: 0');
     expect(messages[0]).toContain('1. I want to create a new project to help me learn English.');
     expect(messages[0]).toContain('Original: 我想创建一个 new project，用来辅助英语学习。');
     expect(messages[0]).toContain('IPA: project /ˈprɑːdʒekt/');

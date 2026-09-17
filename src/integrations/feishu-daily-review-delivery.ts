@@ -1,7 +1,9 @@
 import { spawn } from 'node:child_process';
 import { cwd } from 'node:process';
-import { buildChatDailyReviewMessages } from './chat-daily-review.js';
+import { buildChatDailyReview } from './chat-daily-review.js';
+import type { DailyReviewSelection } from '../core/daily-review-selection.js';
 import type { LearningItem } from '../storage/repository.js';
+import type { LearningItemCleanupSummary } from '../storage/repository.js';
 
 export interface FeishuDailyReviewNotifyRequest {
   title: string;
@@ -19,18 +21,22 @@ export interface FeishuDailyReviewDeliveryResult {
   operation: 'feishu-daily-review-delivery';
   target: 'feishu';
   delivered: boolean;
-  network: true;
+  network: boolean;
   messagesSent: number;
   messageCount: number;
   session: string;
   messagePreview: string;
+  cleanup?: LearningItemCleanupSummary;
+  selection?: DailyReviewSelection;
   blocker?: string;
   errors?: string[];
 }
 
 export interface FeishuDailyReviewDeliveryInput {
   date: string;
-  items: LearningItem[];
+  items?: LearningItem[];
+  cleanupItems?: (date: string) => LearningItemCleanupSummary;
+  loadItems?: () => LearningItem[];
   session?: string;
   maxItems?: number;
   maxCharsPerMessage?: number;
@@ -48,13 +54,32 @@ export async function deliverFeishuDailyReview(
     input.env?.ENGLISH_PILOT_FEISHU_SESSION ??
     input.env?.FEISHU_DAILY_REVIEW_SESSION ??
     defaultFeishuDailyReviewSession(input.cwd ?? cwd());
-  const messages = buildChatDailyReviewMessages({
+  let cleanup: LearningItemCleanupSummary | undefined;
+  let items = input.items ?? [];
+  try {
+    cleanup = input.cleanupItems?.(input.date);
+    if (input.loadItems) items = input.loadItems();
+  } catch (error) {
+    return {
+      operation: 'feishu-daily-review-delivery',
+      target: 'feishu',
+      delivered: false,
+      network: false,
+      messagesSent: 0,
+      messageCount: 0,
+      session,
+      messagePreview: '',
+      blocker: `Daily review cleanup failed: ${sanitizeError(error)}`,
+    };
+  }
+  const review = buildChatDailyReview({
     date: input.date,
-    items: input.items,
+    items,
     maxItems: input.maxItems,
     maxCharsPerMessage: input.maxCharsPerMessage,
     maxMessages: input.maxMessages,
   });
+  const messages = review.messages;
   const notify = input.notify ?? createTcbNotify(input.env);
   const errors: string[] = [];
   let messagesSent = 0;
@@ -82,6 +107,8 @@ export async function deliverFeishuDailyReview(
     messageCount: messages.length,
     session,
     messagePreview: previewMessage(messages[0] ?? ''),
+    ...(cleanup ? { cleanup } : {}),
+    selection: review.selection,
     ...(errors.length > 0
       ? {
           blocker: 'Feishu daily review delivery failed for one or more message chunks.',
@@ -89,6 +116,11 @@ export async function deliverFeishuDailyReview(
         }
       : {}),
   };
+}
+
+function sanitizeError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.replace(/\s+/g, ' ').trim().slice(0, 160) || 'unknown storage error';
 }
 
 export function defaultFeishuDailyReviewSession(path: string): string {

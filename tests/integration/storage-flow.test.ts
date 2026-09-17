@@ -3,7 +3,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runCli } from '../../src/adapters/cli.js';
-import { recordLearningItem } from '../../src/storage/repository.js';
+import {
+  cleanupLearningItems,
+  listLearningItems,
+  recordLearningItem,
+  updateLearningItem,
+} from '../../src/storage/repository.js';
 
 describe('local learning storage flow', () => {
   let previousHome: string | undefined;
@@ -37,6 +42,42 @@ describe('local learning storage flow', () => {
         ipa: expect.arrayContaining([expect.objectContaining({ word: 'create', ipa: '/kriˈeɪt/' })]),
       },
     ]);
+  });
+
+  it('rejects low-quality learning items while accepting useful new content', () => {
+    const rejected = recordLearningItem({ original: 'hello', suggested: 'Hello.' });
+    const accepted = recordLearningItem({
+      original: 'why content not update',
+      suggested: 'Why did the content not update?',
+    });
+
+    expect(rejected).toBeUndefined();
+    expect(accepted).toMatchObject({ suggested: 'Why did the content not update?' });
+    expect(listLearningItems()).toHaveLength(1);
+  });
+
+  it('atomically removes low-quality and stale never-reviewed items', () => {
+    writeFileSync(join(home, 'config.json'), JSON.stringify({ storage: 'jsonl' }));
+    const records = [
+      storedItem('recent', { createdAt: '2026-09-10T00:00:00.000Z', nextReviewAt: '2026-09-11' }),
+      storedItem('stale', { createdAt: '2026-07-01T00:00:00.000Z', nextReviewAt: '2026-07-02' }),
+      storedItem('reviewed', {
+        createdAt: '2026-07-01T00:00:00.000Z',
+        nextReviewAt: '2026-07-02',
+        reviewCount: 1,
+      }),
+      storedItem('noisy', { original: 'hello', suggested: 'Hello.', reviewCount: 2 }),
+    ];
+    writeFileSync(join(home, 'learning-items.jsonl'), `${records.map((item) => JSON.stringify(item)).join('\n')}\n`);
+
+    expect(cleanupLearningItems('2026-09-17')).toEqual({
+      examined: 4,
+      lowQualityDeleted: 1,
+      staleDeleted: 1,
+      protected: 1,
+      remaining: 2,
+    });
+    expect(listLearningItems().map(({ id }) => id)).toEqual(['recent', 'reviewed']);
   });
 
   it('does not auto-record long business prompts with incidental Chinese text', () => {
@@ -195,8 +236,10 @@ describe('local learning storage flow', () => {
 
   it('updates a learning item in the review queue', () => {
     const original = '参考~/work/reference-service 一样对齐处理';
-    runCli(['coach', '--text', original, '--record', '--json']);
-    const [item] = JSON.parse(runCli(['review', '--json']).stdout);
+    const item = recordLearningItem({
+      original,
+      suggested: 'Please align this with the reference service.',
+    })!;
 
     const updated = runCli([
       'review',
@@ -233,7 +276,11 @@ describe('local learning storage flow', () => {
   });
 
   it('previews and confirms cleanup of likely noisy review items', () => {
-    const noisy = recordLearningItem({
+    const legacySeed = recordLearningItem({
+      original: 'Please help me rewrite this technical request clearly.',
+      suggested: 'Please rewrite this technical request in clear English.',
+    });
+    const noisy = updateLearningItem(legacySeed!.id, {
       original: [
         'You are a spec compliance reviewer for Task 5 only. Do not edit files.',
         'Review the implementation in this worktree: /workspace/project',
@@ -247,6 +294,8 @@ describe('local learning storage flow', () => {
       original: '我想创建一个 new project，用来辅助英语学习。',
       suggested: 'I want to create a new project to help me learn and use English during my normal AI conversations.',
     });
+    expect(noisy).toBeDefined();
+    expect(useful).toBeDefined();
 
     const preview = runCli(['review', 'cleanup', '--json']);
     const beforeDelete = runCli(['review', '--json']);
@@ -258,7 +307,7 @@ describe('local learning storage flow', () => {
       candidateCount: 1,
       candidates: [
         {
-          id: noisy.id,
+          id: noisy!.id,
           reasons: expect.arrayContaining([
             'generic rewrite fallback',
             'multi-section prompt',
@@ -267,14 +316,14 @@ describe('local learning storage flow', () => {
         },
       ],
     });
-    expect(JSON.parse(beforeDelete.stdout).map((item: { id: string }) => item.id)).toEqual([noisy.id, useful.id]);
+    expect(JSON.parse(beforeDelete.stdout).map((item: { id: string }) => item.id)).toEqual([noisy!.id, useful!.id]);
     expect(JSON.parse(deleted.stdout)).toMatchObject({
       mode: 'delete',
       candidateCount: 1,
       removedCount: 1,
-      removed: [noisy.id],
+      removed: [noisy!.id],
     });
-    expect(JSON.parse(afterDelete.stdout).map((item: { id: string }) => item.id)).toEqual([useful.id]);
+    expect(JSON.parse(afterDelete.stdout).map((item: { id: string }) => item.id)).toEqual([useful!.id]);
   });
 
   it('lists due and upcoming review schedule items', () => {
@@ -286,13 +335,10 @@ describe('local learning storage flow', () => {
       '--record',
       '--json',
     ]);
-    runCli([
-      'coach',
-      '--text',
-      'I want to design and refine this workflow for pronunciation practice.',
-      '--record',
-      '--json',
-    ]);
+    recordLearningItem({
+      original: '我想优化 pronunciation practice workflow。',
+      suggested: 'I want to refine this workflow for pronunciation practice.',
+    });
     const items = JSON.parse(runCli(['review', '--json']).stdout);
     const dueItem = items.find((item: { suggested: string }) => item.suggested.includes('threshold'));
     const upcomingItem = items.find((item: { original: string }) => item.original.includes('pronunciation practice'));
@@ -404,3 +450,20 @@ describe('local learning storage flow', () => {
     expect(readFileSync(expectedPath, 'utf8')).toContain('Original: 这个 threshold 后续支持调整强度');
   });
 });
+
+function storedItem(id: string, overrides: Record<string, unknown> = {}) {
+  return {
+    id,
+    createdAt: '2026-09-10T00:00:00.000Z',
+    nextReviewAt: '2026-09-11',
+    ease: 2.5,
+    reviewCount: 0,
+    lapseCount: 0,
+    intervalDays: 1,
+    original: `original ${id}`,
+    suggested: `A useful English expression for ${id}.`,
+    tags: [],
+    ipa: [],
+    ...overrides,
+  };
+}

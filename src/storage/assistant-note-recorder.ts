@@ -11,6 +11,7 @@ export function recordAssistantEnglishNote(
 ): LearningItem {
   const draft = buildAssistantEnglishNoteLearningItem(source, note);
   const item = recordLearningItem(draft);
+  if (!item) throw new Error('Assistant English note did not meet the learning-item quality policy.');
   return (
     updateLearningItem(item.id, {
       original: draft.original,

@@ -1,4 +1,4 @@
-import { buildReviewCleanupPlan } from '../core/review-cleanup.js';
+import { selectDailyReviewItems, type DailyReviewSelection } from '../core/daily-review-selection.js';
 import type { LearningItem } from '../storage/repository.js';
 
 const DEFAULT_MAX_ITEMS = 12;
@@ -15,35 +15,29 @@ export interface ChatDailyReviewMessageInput {
 }
 
 export function buildChatDailyReviewMessages(input: ChatDailyReviewMessageInput): string[] {
+  return buildChatDailyReview(input).messages;
+}
+
+export function buildChatDailyReview(input: ChatDailyReviewMessageInput): {
+  messages: string[];
+  selection: DailyReviewSelection;
+} {
   const maxItems = input.maxItems ?? DEFAULT_MAX_ITEMS;
   const maxCharsPerMessage = input.maxCharsPerMessage ?? DEFAULT_MAX_CHARS_PER_MESSAGE;
   const maxMessages = input.maxMessages ?? DEFAULT_MAX_MESSAGES;
-  const dueItems = input.items.filter((item) => item.nextReviewAt <= input.date);
-  const selectedItems = selectChatReviewItems(dueItems, maxItems);
-  const blocks = selectedItems.map(formatChatReviewItem);
+  const selection = selectDailyReviewItems({ items: input.items, date: input.date, maxItems });
+  const blocks = selection.items.map(formatChatReviewItem);
   const header = [
     `EnglishPilot Daily Review - ${input.date}`,
-    `Due: ${dueItems.length} | Selected: ${selectedItems.length}`,
+    `Eligible: ${selection.eligibleCount} | Recent: ${selection.counts.recent} | Reviewed: ${selection.counts.reviewed} | Backlog: ${selection.counts.backlog}`,
   ];
   if (blocks.length === 0) {
     blocks.push('No high-quality review items are due today after filtering.');
   }
-  return chunkChatMessages({
-    header,
-    blocks,
-    maxCharsPerMessage,
-    maxMessages,
-  });
-}
-
-function selectChatReviewItems(items: LearningItem[], maxItems: number): LearningItem[] {
-  const noisy = new Set(buildReviewCleanupPlan(items).candidates.map((candidate) => candidate.id));
-  return items
-    .filter((item) => !noisy.has(item.id))
-    .filter((item) => item.suggested.trim().length > 0 && item.original.trim().length > 0)
-    .filter((item) => item.suggested.trim() !== item.original.trim())
-    .filter((item) => item.suggested.length <= 220 && item.original.length <= 220)
-    .slice(0, Math.max(0, maxItems));
+  return {
+    messages: chunkChatMessages({ header, blocks, maxCharsPerMessage, maxMessages }),
+    selection,
+  };
 }
 
 function formatChatReviewItem(item: LearningItem, index: number): string {

@@ -2192,12 +2192,22 @@ describe('runCli', () => {
         network: true,
         messagesSent: 1,
         session: expect.stringContaining('tmux_proj_'),
+        cleanup: {
+          examined: 1,
+          lowQualityDeleted: 0,
+          staleDeleted: 0,
+          remaining: 1,
+        },
+        selection: {
+          eligibleCount: 1,
+          counts: { recent: 1, reviewed: 0, backlog: 0 },
+        },
       });
       expect(readFileSync(argsLog, 'utf8')).toContain('notify --channel lark --session');
       expect(readFileSync(argsLog, 'utf8')).toContain('--source english-pilot');
       const body = readFileSync(bodyLog, 'utf8');
       expect(body).toContain('EnglishPilot Daily Review');
-      expect(body).toContain('Due: 1 | Selected: 1');
+      expect(body).toContain('Eligible: 1 | Recent: 1 | Reviewed: 0 | Backlog: 0');
       expect(body).toContain('Original:');
       expect(body).not.toContain('Review prompt');
       expect(body).not.toContain('Next review');

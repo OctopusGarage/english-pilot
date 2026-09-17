@@ -62,6 +62,56 @@ describe('deliverFeishuDailyReview', () => {
     expect(result.blocker).toBe('Feishu daily review delivery failed for one or more message chunks.');
     expect(result.errors).toEqual(['part 2: send failed']);
   });
+
+  it('cleans storage before loading and reports cleanup and cohort selection', async () => {
+    const events: string[] = [];
+    const result = await deliverFeishuDailyReview({
+      date: '2026-09-17',
+      cleanupItems: () => {
+        events.push('cleanup');
+        return { examined: 20, lowQualityDeleted: 2, staleDeleted: 3, protected: 1, remaining: 15 };
+      },
+      loadItems: () => {
+        events.push('load');
+        return [item({ id: 'recent', createdAt: '2026-09-16T00:00:00.000Z', nextReviewAt: '2026-09-17' })];
+      },
+      notify: async () => {
+        events.push('notify');
+        return { ok: true };
+      },
+    });
+
+    expect(events).toEqual(['cleanup', 'load', 'notify']);
+    expect(result).toMatchObject({
+      delivered: true,
+      cleanup: { lowQualityDeleted: 2, staleDeleted: 3, remaining: 15 },
+      selection: { eligibleCount: 1, counts: { recent: 1, reviewed: 0, backlog: 0 } },
+    });
+  });
+
+  it('fails before network delivery when cleanup fails', async () => {
+    let notifications = 0;
+    const result = await deliverFeishuDailyReview({
+      date: '2026-09-17',
+      cleanupItems: () => {
+        throw new Error('database locked');
+      },
+      loadItems: () => [],
+      notify: async () => {
+        notifications += 1;
+        return { ok: true };
+      },
+    });
+
+    expect(notifications).toBe(0);
+    expect(result).toMatchObject({
+      delivered: false,
+      network: false,
+      messagesSent: 0,
+      messageCount: 0,
+      blocker: 'Daily review cleanup failed: database locked',
+    });
+  });
 });
 
 describe('defaultFeishuDailyReviewSession', () => {

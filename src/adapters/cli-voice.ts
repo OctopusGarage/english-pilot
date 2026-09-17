@@ -196,6 +196,7 @@ export function runVoice(args: string[]): CliResult {
       feedback: getFlagValue(args, '--feedback'),
     });
     const item = recordLearningItem(draft);
+    if (!item) return errorResult('Voice practice item did not meet the learning-item quality policy.');
     return {
       exitCode: 0,
       stdout: args.includes('--json')
@@ -223,6 +224,7 @@ export function runVoice(args: string[]): CliResult {
         feedback: getFlagValue(args, '--feedback'),
       });
       const item = recordLearningItem(result.draft);
+      if (!item) return errorResult('Voice practice item did not meet the learning-item quality policy.');
       return {
         exitCode: 0,
         stdout: args.includes('--json')
@@ -291,6 +293,7 @@ export async function runVoiceAsync(args: string[], options: CliAsyncOptions): P
         fetch: options.fetch,
       });
       const item = recordLearningItem(result.draft);
+      if (!item) return errorResult('Voice practice item did not meet the learning-item quality policy.');
       return {
         exitCode: 0,
         stdout: args.includes('--json')
