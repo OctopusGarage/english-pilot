@@ -2,6 +2,33 @@ import XCTest
 @testable import EnglishPilotCompanion
 
 final class ModelsTests: XCTestCase {
+    func testDecodesSharedLocalReadyContractFixture() throws {
+        let data = try Self.contractFixture(named: "local-ready.json")
+        let response = try JSONDecoder().decode(TranslationStageResponse.self, from: data)
+
+        XCTAssertEqual(response.requestId, "fixture-local-ready")
+        XCTAssertEqual(response.source, "ghostty")
+        XCTAssertEqual(response.stage, .local)
+        XCTAssertEqual(response.status, .ready)
+        XCTAssertEqual(response.result?.translation, "工作流程")
+        XCTAssertEqual(response.result?.ipa, [
+            PronunciationEntry(word: "workflow", ipa: "/ˈwɝːkfloʊ/")
+        ])
+    }
+
+    func testDecodesSharedAgentReadyContractFixture() throws {
+        let data = try Self.contractFixture(named: "agent-ready.json")
+        let response = try JSONDecoder().decode(TranslationEnrichmentStageResponse.self, from: data)
+
+        XCTAssertEqual(response.requestId, "fixture-agent-ready")
+        XCTAssertEqual(response.source, "ghostty")
+        XCTAssertEqual(response.stage, .agent)
+        XCTAssertEqual(response.status, .ready)
+        XCTAssertEqual(response.result?.translation, "工作流程")
+        XCTAssertEqual(response.result?.partOfSpeech, "noun")
+        XCTAssertEqual(response.result?.examples, ["This workflow keeps translation lookup fast."])
+    }
+
     func testDecodesLocalResponse() throws {
         let data = Data(#"{"requestId":"r1","source":"ghostty","stage":"local","status":"ready","result":{"original":"workflow","normalized":"workflow","kind":"word","translation":"工作流程","explanation":"Local glossary entry.","examples":[],"collocations":[],"ipa":[],"lesson":{"suggested":"workflow","scene":"Ghostty translation lookup","pattern":"Reuse the selected expression.","tags":["ghostty-lookup","word"],"worthRecording":true}}}"#.utf8)
         let response = try JSONDecoder().decode(TranslationStageResponse.self, from: data)
@@ -258,6 +285,16 @@ final class ModelsTests: XCTestCase {
                 result
             )
         }
+    }
+
+    private static func contractFixture(named name: String) throws -> Data {
+        var url = URL(fileURLWithPath: #filePath)
+        for _ in 0..<5 {
+            url.deleteLastPathComponent()
+        }
+        url.appendPathComponent("tests/fixtures/translation-contract")
+        url.appendPathComponent(name)
+        return try Data(contentsOf: url)
     }
 
     func testRejectsOversizedTranslationEnrichmentListsAndItems() {

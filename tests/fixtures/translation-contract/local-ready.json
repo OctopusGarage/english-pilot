@@ -1,0 +1,30 @@
+{
+  "requestId": "fixture-local-ready",
+  "source": "ghostty",
+  "stage": "local",
+  "status": "ready",
+  "result": {
+    "original": "workflow",
+    "normalized": "workflow",
+    "kind": "word",
+    "translation": "工作流程",
+    "pronunciation": "/ˈwɝːkfloʊ/",
+    "explanation": "Local glossary entry for \"workflow\".",
+    "examples": [],
+    "collocations": [],
+    "ipa": [
+      {
+        "word": "workflow",
+        "ipa": "/ˈwɝːkfloʊ/"
+      }
+    ],
+    "lesson": {
+      "suggested": "workflow",
+      "scene": "Ghostty translation lookup",
+      "pattern": "Reuse the selected expression.",
+      "tags": ["ghostty-lookup", "word"],
+      "worthRecording": true
+    }
+  },
+  "recorded": false
+}

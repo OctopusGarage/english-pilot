@@ -1,0 +1,13 @@
+{
+  "requestId": "fixture-agent-ready",
+  "source": "ghostty",
+  "stage": "agent",
+  "status": "ready",
+  "result": {
+    "translation": "工作流程",
+    "partOfSpeech": "noun",
+    "explanation": "A workflow is an ordered sequence of work.",
+    "examples": ["This workflow keeps translation lookup fast."],
+    "collocations": ["translation workflow", "local workflow"]
+  }
+}

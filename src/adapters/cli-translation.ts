@@ -11,6 +11,7 @@ import {
 } from '../agent/runner.js';
 import { loadConfig } from '../core/config.js';
 import { listGlossaryEntries } from '../core/glossary.js';
+import { performLocalTranslationLookup } from '../core/translation-lookup.js';
 import {
   buildTranslationEnrichmentPrompt,
   parseTranslationEnrichment,
@@ -19,11 +20,7 @@ import {
   type TranslationEnrichmentErrorCode,
   type TranslationEnrichmentStageResponse,
 } from '../core/translation-enrichment.js';
-import {
-  buildLocalTranslationResult,
-  type TranslationRequest,
-  type TranslationStageResponse,
-} from '../core/translation-result.js';
+import { type TranslationRequest, type TranslationStageResponse } from '../core/translation-result.js';
 import { recordLearningItem } from '../storage/repository.js';
 import type { CliResult } from './cli-types.js';
 import { getFlagValue, isRecord } from './cli-args.js';
@@ -75,29 +72,11 @@ export function runTranslate(args: string[], stdin: string): CliResult {
   let request: TranslationRequest | undefined;
   try {
     request = readRequest(args, stdin);
-    const result: TranslationStageResponse = {
-      requestId: request.requestId,
-      source: request.source,
-      stage: 'local',
-      status: 'ready',
-      result: buildLocalTranslationResult(request.text, listGlossaryEntries()),
-    };
-    const item =
-      args.includes('--record') && result.result.lesson.worthRecording
-        ? recordLearningItem({
-            original: result.result.original,
-            suggested: result.result.lesson.suggested,
-            scene: result.result.lesson.scene,
-            pattern: result.result.lesson.pattern,
-            tags: [...new Set([...result.result.lesson.tags, 'ghostty-lookup'])],
-            ipa: result.result.ipa,
-          })
-        : undefined;
-    const response = {
-      ...result,
-      recorded: item !== undefined,
-      ...(item ? { item } : {}),
-    };
+    const response = performLocalTranslationLookup(request, {
+      glossary: listGlossaryEntries(),
+      record: args.includes('--record'),
+      recordLearningItem,
+    });
     return {
       exitCode: 0,
       stdout: args.includes('--json') ? `${JSON.stringify(response)}\n` : formatTranslation(response),
