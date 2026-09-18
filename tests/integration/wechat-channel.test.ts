@@ -256,6 +256,87 @@ describe('WeChat long-connection channel', () => {
     });
   });
 
+  it('ignores missing-sender and self WeChat messages before recording or replying', async () => {
+    runCli(['config', 'set', 'externalAgentBackend', 'codex']);
+    const account = accountFixture();
+    const config = {
+      accounts: [account],
+      allowedUsers: new Set(['wxid_owner@im.wechat']),
+      replyMode: 'violation' as const,
+      botAgent: 'EnglishPilot/0.1.0',
+    };
+    let agentCalls = 0;
+    let replyCalls = 0;
+
+    const missingSender = await handleWeChatMessage({
+      account,
+      config,
+      message: {
+        message_id: 'missing-sender',
+        item_list: [{ type: 1, text_item: { text: 'Please help with this.' } }],
+      },
+      runAgent: async () => {
+        agentCalls += 1;
+        return agentResult('codex', 'unexpected');
+      },
+      sendText: async () => {
+        replyCalls += 1;
+        return { sent: true };
+      },
+    });
+    const selfMessage = await handleWeChatMessage({
+      account,
+      config,
+      message: {
+        ...wechatTextMessage('Please help with this.'),
+        from_user_id: account.accountId,
+      },
+      runAgent: async () => {
+        agentCalls += 1;
+        return agentResult('codex', 'unexpected');
+      },
+      sendText: async () => {
+        replyCalls += 1;
+        return { sent: true };
+      },
+    });
+
+    expect(missingSender).toEqual({ handled: false, replied: false, reason: 'missing-sender' });
+    expect(selfMessage).toEqual({ handled: false, replied: false, reason: 'self-message' });
+    expect(agentCalls).toBe(0);
+    expect(replyCalls).toBe(0);
+    expect(listPromptEvents()).toEqual([]);
+  });
+
+  it('reports WeChat coaching reply delivery failures without invoking the agent', async () => {
+    runCli(['config', 'set', 'externalAgentBackend', 'codex']);
+    const account = accountFixture();
+    const logs: string[] = [];
+    let agentCalls = 0;
+
+    const result = await handleWeChatMessage({
+      account,
+      config: {
+        accounts: [account],
+        allowedUsers: new Set(['wxid_owner@im.wechat']),
+        replyMode: 'violation',
+        botAgent: 'EnglishPilot/0.1.0',
+      },
+      message: wechatTextMessage('我想创建一个 new project，用来辅助英语学习。'),
+      log: (line) => logs.push(line),
+      runAgent: async () => {
+        agentCalls += 1;
+        return agentResult('codex', 'unexpected');
+      },
+      sendText: async () => ({ sent: false, error: 'invalid context token' }),
+    });
+
+    expect(result).toEqual({ handled: true, replied: false });
+    expect(agentCalls).toBe(0);
+    expect(logs.join('\n')).toContain('Failed to reply to WeChat coaching reply msg-28: invalid context token');
+    expect(listPromptEvents()).toHaveLength(1);
+  });
+
   it('routes allowed WeChat messages to the configured external agent backend', async () => {
     runCli(['config', 'use', 'force']);
     runCli(['config', 'set', 'externalAgentBackend', 'codex']);
