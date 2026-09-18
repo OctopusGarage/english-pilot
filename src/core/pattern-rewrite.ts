@@ -18,6 +18,10 @@ export function suggestPatternRewrite(original: string): string | undefined {
     return 'I want to create a new project to help me learn and use English during my normal AI conversations.';
   }
 
+  if (/内心独白/.test(normalized) && /上面两段|两段/.test(normalized) && /视角|视鱼/.test(normalized)) {
+    return 'I would like you to talk with me from the perspective of my inner monologue so I can practice English more easily. Could you combine the two paragraphs above and rephrase them from my point of view?';
+  }
+
   if (/提交\s*(并|和|然后)?\s*推送/.test(normalized)) {
     return 'Commit and push the changes.';
   }

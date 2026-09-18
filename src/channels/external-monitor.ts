@@ -49,6 +49,7 @@ function recordChannelLesson(
   input: ExternalChannelTextMonitorInput,
   assessment: PromptAssessment,
 ): LearningItem | undefined {
+  if (assessment.analysis.decision === 'BLOCK' && !assessment.rewrite) return undefined;
   if (!assessment.lesson.worthRecording && !assessment.rewrite) return undefined;
   return recordLearningItem({
     original: assessment.lesson.original,
@@ -65,16 +66,17 @@ function buildReplyText(
   decision: ExternalChannelTextMonitorResult['decision'],
   rewrite: string | undefined,
 ): string {
-  const quote = formatQuote(
-    input.quoteStyle,
-    rewrite ??
-      (decision === 'BLOCK'
-        ? 'Please rewrite this mainly in English while preserving the original intent.'
-        : input.text),
-  );
   if (decision === 'BLOCK') {
+    if (!rewrite) {
+      return [
+        'I could not produce a reliable English rewrite automatically.',
+        'Please restate the request in English so the original intent is preserved.',
+      ].join('\n');
+    }
+    const quote = formatQuote(input.quoteStyle, rewrite);
     return ['Try this in English:', '', quote, '', 'I recorded this as a review item when it was useful.'].join('\n');
   }
+  const quote = formatQuote(input.quoteStyle, input.text);
   return ['English note:', '', quote].join('\n');
 }
 

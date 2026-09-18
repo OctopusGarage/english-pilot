@@ -1,5 +1,6 @@
 import { analyzeText } from './analyze.js';
-import { suggestLearningItem, suggestRewrite } from './coach.js';
+import { buildPronunciationBite } from './pronunciation.js';
+import { suggestRewriteCandidate } from './coach.js';
 import { extractLesson, type ExtractedLesson } from './lesson.js';
 import type { AnalysisResult, EnglishPilotConfig } from './types.js';
 
@@ -24,8 +25,9 @@ export function buildPromptAssessment(input: {
 }): PromptAssessment {
   const rawAnalysis = analyzeText(input.text, input.config, input.allowedTerms ?? []);
   const analysis = applyGateMode(rawAnalysis, input.config);
-  const rewrite =
-    rawAnalysis.decision === 'BLOCK' && input.config.blockWithRewrite ? suggestRewrite(input.text) : undefined;
+  const rewriteCandidate =
+    rawAnalysis.decision === 'BLOCK' && input.config.blockWithRewrite ? suggestRewriteCandidate(input.text) : undefined;
+  const rewrite = rewriteCandidate?.displayable ? rewriteCandidate.text : undefined;
   const lesson = extractLesson(input.text);
   const coachingNote =
     input.promptEvents !== undefined
@@ -80,17 +82,19 @@ function buildCoachingNote(input: {
   if (!forceCoaching && hasReachedDailyCoachingCap(input.promptEvents, input.config.maxInlineCoachingPerDay)) {
     return undefined;
   }
-  return formatTeachingNote(input.text, suggestLearningItem(input.text));
+  const rewriteCandidate = suggestRewriteCandidate(input.text);
+  if (!rewriteCandidate.displayable) return undefined;
+  return formatTeachingNote(input.text, rewriteCandidate.text);
 }
 
-function formatTeachingNote(text: string, suggestion: ReturnType<typeof suggestLearningItem>): string {
-  const ipa = suggestion.ipa
+function formatTeachingNote(text: string, suggested: string): string {
+  const ipa = buildPronunciationBite(suggested)
     .slice(0, 3)
     .map((entry) => `${entry.word} ${entry.ipa}`)
     .join('; ');
   return [
-    `English note: "${text}" -> "${suggestion.suggested}"`,
-    `Why: ${explainRewrite(text, suggestion.suggested)}`,
+    `English note: "${text}" -> "${suggested}"`,
+    `Why: ${explainRewrite(text, suggested)}`,
     ...(ipa ? [`IPA: ${ipa}`] : []),
   ].join('\n');
 }

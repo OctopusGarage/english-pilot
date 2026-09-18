@@ -1,5 +1,5 @@
 import { analyzeText } from '../core/analyze.js';
-import { suggestRewrite } from '../core/coach.js';
+import { suggestRewriteCandidate } from '../core/coach.js';
 import { buildCoachingContext } from '../core/coaching-context.js';
 import { loadConfig } from '../core/config.js';
 import { listGlossaryEntries } from '../core/glossary.js';
@@ -19,7 +19,13 @@ export function handleLanguageMcpTool(
     }
     case 'english_rewrite_text': {
       const text = requireText(args);
-      return { rewrite: suggestRewrite(text) };
+      const candidate = suggestRewriteCandidate(text);
+      return {
+        ...(candidate.displayable ? { rewrite: candidate.text } : {}),
+        source: candidate.source,
+        displayable: candidate.displayable,
+        ...(candidate.reason ? { reason: candidate.reason } : {}),
+      };
     }
     case 'english_pronounce_text': {
       const text = requireText(args);

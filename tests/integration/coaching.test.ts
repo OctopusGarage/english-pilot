@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -8,10 +8,14 @@ import { defaultConfig } from '../../src/core/policy.js';
 
 describe('inline coaching policy', () => {
   let previousHome: string | undefined;
+  let previousBackend: string | undefined;
+  let previousPython: string | undefined;
   let home: string;
 
   beforeEach(() => {
     previousHome = process.env.ENGLISH_PILOT_HOME;
+    previousBackend = process.env.ENGLISH_PILOT_REWRITE_BACKEND;
+    previousPython = process.env.ARGOS_TRANSLATE_PYTHON;
     home = mkdtempSync(join(tmpdir(), 'english-pilot-coaching-'));
     process.env.ENGLISH_PILOT_HOME = home;
   });
@@ -22,6 +26,8 @@ describe('inline coaching policy', () => {
     } else {
       process.env.ENGLISH_PILOT_HOME = previousHome;
     }
+    restoreEnv('ENGLISH_PILOT_REWRITE_BACKEND', previousBackend);
+    restoreEnv('ARGOS_TRANSLATE_PYTHON', previousPython);
     rmSync(home, { recursive: true, force: true });
   });
 
@@ -52,6 +58,35 @@ describe('inline coaching policy', () => {
     });
     expect(output.coachingNote).toContain('Why:');
     expect(output.coachingNote).toContain('IPA:');
+  });
+
+  it('does not expose a fallback rewrite when local translator output fails the quality gate', () => {
+    const fakePython = join(home, 'fake-python');
+    writeFileSync(fakePython, '#!/bin/sh\ncat >/dev/null\nprintf "I want you to contact English. Down."\n', 'utf8');
+    chmodSync(fakePython, 0o755);
+    process.env.ENGLISH_PILOT_REWRITE_BACKEND = 'argos';
+    process.env.ARGOS_TRANSLATE_PYTHON = fakePython;
+
+    const result = runCli(['check', '--text', '帮我联系英语', '--json']);
+    const output = JSON.parse(result.stdout);
+
+    expect(output.decision).toBe('BLOCK');
+    expect(output.rewrite).toBeUndefined();
+  });
+
+  it('does not add an inline coaching note when no displayable rewrite is available', () => {
+    runCli(['config', 'use', 'coach']);
+    const fakePython = join(home, 'fake-python');
+    writeFileSync(fakePython, '#!/bin/sh\ncat >/dev/null\nprintf "I want you to contact English. Down."\n', 'utf8');
+    chmodSync(fakePython, 0o755);
+    process.env.ENGLISH_PILOT_REWRITE_BACKEND = 'argos';
+    process.env.ARGOS_TRANSLATE_PYTHON = fakePython;
+
+    const result = runCli(['check', '--text', 'I want to 和你对话来练习英语 in this chat.', '--json']);
+    const output = JSON.parse(result.stdout);
+
+    expect(output.decision).toBe('ALLOW_WITH_COACHING');
+    expect(output.coachingNote).toBeUndefined();
   });
 
   it('reports non-blocking coach mode in agent-facing coaching context', () => {
@@ -196,3 +231,11 @@ describe('inline coaching policy', () => {
     });
   });
 });
+
+function restoreEnv(key: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[key];
+  } else {
+    process.env[key] = value;
+  }
+}

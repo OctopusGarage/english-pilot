@@ -1,4 +1,4 @@
-import { buildPronunciationBite, suggestRewrite, type PronunciationEntry } from './coach.js';
+import { buildPronunciationBite, suggestRewriteCandidate, type PronunciationEntry } from './coach.js';
 import { listGlossaryEntries } from './glossary.js';
 
 export interface ExtractedLesson {
@@ -70,11 +70,12 @@ export function buildDailyReviewPack(
 }
 
 export function extractLesson(text: string): ExtractedLesson {
-  const suggested = suggestLessonRewrite(text);
+  const rewrite = suggestLessonRewrite(text);
+  const suggested = rewrite.suggested;
   const keyPhrases = extractKeyPhrases(text, suggested);
   const glossaryIpa = buildGlossaryPronunciationBite(`${text} ${suggested}`);
   const scene = detectScene(text);
-  const worthRecording = isWorthRecording(text, keyPhrases);
+  const worthRecording = keyPhrases.length > 0 || (rewrite.displayable && isWorthRecording(text, keyPhrases));
   return {
     original: text,
     suggested,
@@ -169,14 +170,21 @@ function formatDailyReviewPackMarkdown(date: string, items: DailyReviewItem[]): 
   return lines.join('\n');
 }
 
-function suggestLessonRewrite(text: string): string {
+function suggestLessonRewrite(text: string): { suggested: string; displayable: boolean } {
   if (isTrivialGreeting(text)) {
-    return 'Hello.';
+    return { suggested: 'Hello.', displayable: true };
   }
   if (/threshold|阈值|强度/.test(text)) {
-    return 'This threshold should support adjustable intensity later, while keeping the workflow sophisticated.';
+    return {
+      suggested: 'This threshold should support adjustable intensity later, while keeping the workflow sophisticated.',
+      displayable: true,
+    };
   }
-  return suggestRewrite(text);
+  const candidate = suggestRewriteCandidate(text);
+  return {
+    suggested: candidate.displayable ? candidate.text : text,
+    displayable: candidate.displayable,
+  };
 }
 
 function isTrivialGreeting(text: string): boolean {

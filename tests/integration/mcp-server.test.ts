@@ -106,6 +106,28 @@ describe('MCP tools', () => {
     });
   });
 
+  it('does not return a displayable MCP rewrite when local translator output fails the quality gate', () => {
+    const previous = {
+      ENGLISH_PILOT_REWRITE_BACKEND: process.env.ENGLISH_PILOT_REWRITE_BACKEND,
+      ARGOS_TRANSLATE_PYTHON: process.env.ARGOS_TRANSLATE_PYTHON,
+    };
+    const fakePython = join(home, 'fake-python');
+    writeFileSync(fakePython, '#!/bin/sh\ncat >/dev/null\nprintf "I want you to contact English. Down."\n', 'utf8');
+    chmodSync(fakePython, 0o755);
+    process.env.ENGLISH_PILOT_REWRITE_BACKEND = 'argos';
+    process.env.ARGOS_TRANSLATE_PYTHON = fakePython;
+
+    try {
+      const result = handleMcpToolCall('english_rewrite_text', { text: '帮我联系英语' });
+      expect(result).toMatchObject({
+        displayable: false,
+      });
+      expect(result).not.toHaveProperty('rewrite');
+    } finally {
+      restoreEnv(previous);
+    }
+  });
+
   it('returns project capability status through MCP', () => {
     const result = handleMcpToolCall('english_status', {});
 

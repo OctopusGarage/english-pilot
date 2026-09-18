@@ -12,6 +12,15 @@ export interface LearningSuggestion {
   ipa: PronunciationEntry[];
 }
 
+export type RewriteCandidateSource = 'pattern' | 'local-provider' | 'fallback';
+
+export interface RewriteCandidate {
+  text: string;
+  source: RewriteCandidateSource;
+  displayable: boolean;
+  reason?: string;
+}
+
 export function suggestLearningItem(original: string): LearningSuggestion {
   const suggested = suggestRewrite(original);
   return {
@@ -24,13 +33,25 @@ export function suggestLearningItem(original: string): LearningSuggestion {
 }
 
 export function suggestRewrite(original: string): string {
+  const candidate = suggestRewriteCandidate(original);
+  return candidate.displayable
+    ? candidate.text
+    : 'Please restate this request in natural English while preserving the original intent.';
+}
+
+export function suggestRewriteCandidate(original: string): RewriteCandidate {
   const patternRewrite = suggestPatternRewrite(original);
-  if (patternRewrite) return patternRewrite;
+  if (patternRewrite) return displayableCandidate(patternRewrite, 'pattern');
 
   const localRewrite = translateWithLocalProvider(original);
-  if (localRewrite) return localRewrite;
+  if (localRewrite) return displayableCandidate(localRewrite, 'local-provider');
 
-  return 'Please rewrite this mainly in English while preserving the original intent.';
+  return {
+    text: 'Please restate this request in natural English while preserving the original intent.',
+    source: 'fallback',
+    displayable: false,
+    reason: 'No reliable rewrite source produced a displayable English expression.',
+  };
 }
 
 function translateWithLocalProvider(original: string): string | undefined {
@@ -61,7 +82,8 @@ function translateWithLocalProvider(original: string): string | undefined {
   if (result.error || result.status !== 0) return undefined;
   const translated = result.stdout.trim().replace(/\s+/g, ' ');
   if (!translated || /[\u4e00-\u9fff]/.test(translated)) return undefined;
-  return ensureSentencePunctuation(translated);
+  const punctuated = ensureSentencePunctuation(translated);
+  return isDisplayableLocalRewrite(punctuated) ? punctuated : undefined;
 }
 
 function resolveRewriteConfig(): { backend: 'off' | 'argos'; argosPython: string; timeoutMs: number } {
@@ -119,6 +141,22 @@ function parsePositiveInt(value: string | undefined): number | undefined {
 
 function ensureSentencePunctuation(value: string): string {
   return /[.!?]$/.test(value) ? value : `${value}.`;
+}
+
+function displayableCandidate(text: string, source: RewriteCandidateSource): RewriteCandidate {
+  return {
+    text,
+    source,
+    displayable: true,
+  };
+}
+
+function isDisplayableLocalRewrite(value: string): boolean {
+  const normalized = value.trim().replace(/\s+/g, ' ');
+  if (normalized.length < 8) return false;
+  if (/\bcontact English\b/i.test(normalized)) return false;
+  if (/\bDown\.$/i.test(normalized)) return false;
+  return true;
 }
 
 export { buildPronunciationBite, type PronunciationEntry };

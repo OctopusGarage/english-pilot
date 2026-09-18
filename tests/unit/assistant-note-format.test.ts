@@ -20,6 +20,7 @@ describe('buildAssistantEnglishNoteFormatGuidance', () => {
     expect(guidance).toContain('Useful patterns:');
     expect(guidance).toContain('Collocations: startup issue');
     expect(guidance).toContain('Common mistake:');
+    expect(guidance).toContain('Better must be the improved English expression for the user text');
   });
 
   it('builds lesson guidance', () => {
