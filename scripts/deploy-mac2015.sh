@@ -48,7 +48,7 @@ if [ "$mode" = "deploy" ]; then
   cd "$repo_root"
 
   pnpm run build
-  artifact_name="$(pnpm pack --pack-destination "$local_tmp" --silent | tail -n 1)"
+  artifact_name="$(pnpm pack --pack-destination "$local_tmp" --silent | tail -n 1 | xargs basename)"
   local_artifact="$local_tmp/$artifact_name"
   [ -f "$local_artifact" ] || {
     echo "pnpm pack did not create the expected artifact: $local_artifact" >&2
@@ -120,7 +120,7 @@ load_service_env() {
 }
 
 installed_version() {
-  root="$(pnpm root -g)"
+  root="$(npm root -g)"
   node -e 'const fs=require("node:fs"); const p=process.argv[1]; try { console.log(JSON.parse(fs.readFileSync(p,"utf8")).version); } catch { console.log("not-installed"); }' "$root/$PACKAGE/package.json"
 }
 
@@ -251,7 +251,7 @@ fi
 
 before_version="$(installed_version)"
 print_section install
-pnpm add -g "$EP_ARTIFACT"
+npm install -g --force "$EP_ARTIFACT"
 after_version="$(installed_version)"
 echo "version_before=$before_version"
 echo "version_after=$after_version"

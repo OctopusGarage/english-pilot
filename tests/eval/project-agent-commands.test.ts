@@ -53,7 +53,7 @@ describe('project agent commands', () => {
     expect(command).toContain('scripts/deploy-mac2015.sh deploy');
     expect(script).toContain('ENGLISH_PILOT_REMOTE:-ys-aquria@mac2015.local');
     expect(script).toContain('pnpm pack');
-    expect(script).toContain('pnpm add -g');
+    expect(script).toContain('npm install -g --force');
     expect(script).toContain('manual-daemon.log');
     expect(script).toContain('deployment_mode=');
     expect(script).toContain('verified_pid=');
