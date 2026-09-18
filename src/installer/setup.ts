@@ -1,6 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { getEnglishPilotHome, loadConfig, setConfigValue } from '../core/config.js';
+import { loadConfig, setConfigValue } from '../core/config.js';
+import { ensureRuntimeLayout, getRuntimeLayout } from '../core/infra/state-dir.js';
 
 export type SetupAgentBackend = 'off' | 'claude' | 'codex';
 
@@ -19,7 +20,7 @@ export function runSetupPlan(input: {
   externalAgentCwd?: string;
   write?: boolean;
 }): SetupPlan {
-  const home = getEnglishPilotHome();
+  const home = (input.write === true ? ensureRuntimeLayout() : getRuntimeLayout()).home;
   const envPath = join(home, '.env');
   const envCreated = input.write === true ? ensureEnvFile(envPath) : !existsSync(envPath);
   const agentBackend = input.agentBackend ?? loadConfig().externalAgentBackend;
@@ -67,9 +68,11 @@ function ensureEnvFile(path: string): boolean {
     const current = readFileSync(path, 'utf8');
     const next = mergeMissingEnvDefaults(current);
     if (next !== current) writeFileSync(path, next, 'utf8');
+    chmodSync(path, 0o600);
     return false;
   }
-  writeFileSync(path, `${defaultEnvTemplate()}\n`, 'utf8');
+  writeFileSync(path, `${defaultEnvTemplate()}\n`, { encoding: 'utf8', mode: 0o600 });
+  chmodSync(path, 0o600);
   return true;
 }
 

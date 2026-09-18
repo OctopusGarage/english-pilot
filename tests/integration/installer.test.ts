@@ -109,6 +109,26 @@ describe('setup command', () => {
     expect(parsed.nextCommands).toContain('english-pilot service install');
     expect(readFileSync(envPath, 'utf8')).toContain('WECHAT_PROCESSING_ACK=on');
     expect(readFileSync(envPath, 'utf8')).toContain('FEISHU_PROCESSING_ACK=on');
+    expect(statSync(envPath).mode & 0o777).toBe(0o600);
+  });
+
+  it('plans setup without creating the runtime home or service env file', () => {
+    const plannedHome = join(home, 'planned-home');
+    process.env.ENGLISH_PILOT_HOME = plannedHome;
+
+    const result = runCli(['setup', '--json']);
+    const parsed = JSON.parse(result.stdout);
+
+    expect(result.exitCode).toBe(0);
+    expect(parsed).toMatchObject({
+      operation: 'setup',
+      home: plannedHome,
+      envPath: join(plannedHome, '.env'),
+      envCreated: true,
+      agentBackend: 'off',
+    });
+    expect(existsSync(plannedHome)).toBe(false);
+    expect(existsSync(join(plannedHome, '.env'))).toBe(false);
   });
 
   it('writes external agent defaults when requested', () => {
