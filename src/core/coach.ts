@@ -4,14 +4,6 @@ import { loadConfig } from './config.js';
 import { suggestPatternRewrite } from './pattern-rewrite.js';
 import { buildPronunciationBite, type PronunciationEntry } from './pronunciation.js';
 
-export interface LearningSuggestion {
-  suggested: string;
-  pattern: string;
-  scene: string;
-  tags: string[];
-  ipa: PronunciationEntry[];
-}
-
 export type RewriteCandidateSource = 'pattern' | 'local-provider' | 'fallback';
 
 export interface RewriteCandidate {
@@ -19,17 +11,6 @@ export interface RewriteCandidate {
   source: RewriteCandidateSource;
   displayable: boolean;
   reason?: string;
-}
-
-export function suggestLearningItem(original: string): LearningSuggestion {
-  const suggested = suggestRewrite(original);
-  return {
-    suggested,
-    pattern: 'State the main request in English, then keep only hard-to-translate terms in Chinese.',
-    scene: 'AI workflow discussion',
-    tags: ['mixed-language', 'workplace-english'],
-    ipa: buildPronunciationBite(suggested),
-  };
 }
 
 export function suggestRewrite(original: string): string {
