@@ -1,7 +1,7 @@
 import type { EnglishPilotConfig } from './types.js';
 import { buildConfigProfileStatus, configProfiles, type ConfigProfile } from './config-profiles.js';
 import { saveConfig } from './config.js';
-import type { PromptEvent } from '../storage/repository.js';
+import type { PromptEvent } from './prompt-event.js';
 
 export type RatioProgressionAction = 'collect_more_data' | 'tighten' | 'relax' | 'keep';
 

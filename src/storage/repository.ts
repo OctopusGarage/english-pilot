@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AnalysisResult, PolicyDecision } from '../core/types.js';
 import { getEnglishPilotHome, loadConfig } from '../core/config.js';
+import type { PromptEvent } from '../core/prompt-event.js';
 import { normalizeReviewSchedulingState, type ReviewOutcome } from '../core/review-scheduler.js';
 import {
   applyLearningItemReviewOutcome,
@@ -23,18 +24,7 @@ const require = createRequire(import.meta.url);
 
 export type { LearningItem, LearningItemDraft, LearningItemUpdate } from '../core/learning-card.js';
 
-export interface PromptEvent {
-  id: string;
-  createdAt: string;
-  source: 'cli' | 'claude-hook' | 'codex-hook' | 'mcp' | 'feishu-channel' | 'wechat-channel';
-  text: string;
-  decision: PolicyDecision;
-  nonEnglishRatio: number;
-  englishCount: number;
-  nonEnglishCount: number;
-  reason: string;
-  coachingShown?: boolean;
-}
+export type { PromptEvent } from '../core/prompt-event.js';
 
 export interface StorageStats {
   promptEvents: number;
