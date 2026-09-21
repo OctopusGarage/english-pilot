@@ -1,4 +1,5 @@
-import type { LearningItem, PromptEvent } from '../storage/repository.js';
+import type { LearningItem } from './learning-card.js';
+import type { PromptEvent } from './prompt-event.js';
 
 export interface HistoryFilters {
   date?: string;

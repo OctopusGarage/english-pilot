@@ -1,5 +1,5 @@
 import type { EnglishPilotConfig } from './types.js';
-import type { PromptEvent } from '../storage/repository.js';
+import type { PromptEvent } from './prompt-event.js';
 import { buildAssistantEnglishNoteFormatGuidance } from './assistant-note-format.js';
 import {
   buildAssistantNoteDomainGuidance,

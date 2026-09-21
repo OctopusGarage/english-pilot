@@ -26,9 +26,9 @@ module.exports = {
     {
       name: 'core-is-protocol-agnostic',
       severity: 'error',
-      comment: 'Core policy/review/config code must not depend on external channel or adapter runtime code.',
+      comment: 'Core policy/review/config code must not depend on runtime adapters or persistence implementations.',
       from: { path: '^src/core' },
-      to: { path: '^src/(adapters|channels|daemon)' },
+      to: { path: '^src/(adapters|channels|daemon|storage)' },
     },
     {
       name: 'channels-do-not-depend-on-cli-or-mcp',
