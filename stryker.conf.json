@@ -1,7 +1,12 @@
 {
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
   "testRunner": "vitest",
+  "plugins": ["@stryker-mutator/vitest-runner"],
+  "vitest": {
+    "configFile": "vitest.stryker.config.mjs"
+  },
   "packageManager": "pnpm",
+  "cleanTempDir": "always",
   "coverageAnalysis": "perTest",
   "mutate": [
     "src/core/**/*.ts",
