@@ -17,28 +17,27 @@ export interface InstanceLock {
 }
 
 export function createInstanceLock(lockPath: string, pid = process.pid): InstanceLock {
-  let owned: { dev: number; ino: number } | undefined;
+  let owned: { dev: number; ino: number; fd: number } | undefined;
   return {
     acquire() {
       if (owned) return;
       const temporaryPath = `${lockPath}.${randomUUID()}.tmp`;
       let ownsTemporary = false;
+      let fd: number | undefined;
       let failure: unknown;
       try {
-        const fd = openSync(temporaryPath, 'wx', 0o600);
+        const descriptor = openSync(temporaryPath, 'wx', 0o600);
+        fd = descriptor;
         ownsTemporary = true;
-        let identity: { dev: number; ino: number };
-        try {
-          writeFileSync(fd, JSON.stringify({ pid, acquiredAt: new Date().toISOString() }), 'utf8');
-          identity = fstatSync(fd);
-        } finally {
-          closeSync(fd);
-        }
+        writeFileSync(fd, JSON.stringify({ pid, acquiredAt: new Date().toISOString() }), 'utf8');
+        const identity = fstatSync(fd);
         // Publish only a complete record; exclusive linking never exposes an empty lock.
         for (;;) {
           try {
             linkSync(temporaryPath, lockPath);
-            owned = identity;
+            // Pin the inode until release so an unlinked record's identity cannot be reused.
+            owned = { dev: identity.dev, ino: identity.ino, fd: descriptor };
+            fd = undefined;
             break;
           } catch (error) {
             // Only publication contention can justify examining an existing lock.
@@ -55,6 +54,11 @@ export function createInstanceLock(lockPath: string, pid = process.pid): Instanc
       }
       try {
         if (ownsTemporary) rmSync(temporaryPath, { force: true });
+      } catch (error) {
+        failure ??= error;
+      }
+      try {
+        if (fd !== undefined) closeSync(fd);
       } catch (error) {
         failure ??= error;
       }
@@ -76,6 +80,7 @@ export function createInstanceLock(lockPath: string, pid = process.pid): Instanc
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
       }
+      closeSync(owned.fd);
       owned = undefined;
     },
   };

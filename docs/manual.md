@@ -232,7 +232,7 @@ node dist/src/bin/english-pilot.js service restart
 
 On shutdown, the daemon closes idle control connections and finishes already-admitted control deliveries before releasing its instance lock. A disconnected or timed-out client does not cancel an admitted delivery. WeChat polling cancels its retry/session waits and stops admitting messages or saving batch cursors after cancellation. A message handler or external request that has already started can still finish; the best-effort WeChat stop notification retains its existing request timeout. An interrupted batch keeps its previous cursor, so some messages may be replayed after restart.
 
-The daemon publishes a fully written private instance-lock file atomically before startup, so concurrent startup cannot mistake an in-progress lock write for an abandoned lock. Publishing requires same-directory hard-link support; a publication error fails startup rather than removing another owner's lock.
+The daemon publishes a fully written private instance-lock file atomically before startup, so concurrent startup cannot mistake an in-progress lock write for an abandoned lock. The daemon keeps the published inode pinned by its open descriptor until release, preventing an unlinked inode from being recycled for a replacement lock. A failed removal retains ownership and the descriptor for a cleanup retry. Publishing requires same-directory hard-link support; a publication error fails startup rather than removing another owner's lock.
 
 If an existing lock cannot be read because of permissions or an I/O error, startup fails and preserves that lock. Missing, malformed, and dead-owner records retain abandoned-lock recovery.
 

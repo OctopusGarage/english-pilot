@@ -9,6 +9,7 @@ vi.mock('node:fs', async (original) => {
   return {
     ...fs,
     openSync: vi.fn(fs.openSync),
+    fstatSync: vi.fn(fs.fstatSync),
     writeSync: vi.fn(fs.writeSync),
     writeFileSync: vi.fn(fs.writeFileSync),
     linkSync: vi.fn(fs.linkSync),
@@ -25,6 +26,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.mocked(fs.openSync).mockReset();
+  vi.mocked(fs.fstatSync).mockReset();
   vi.mocked(fs.writeSync).mockReset();
   vi.mocked(fs.writeFileSync).mockReset();
   vi.mocked(fs.linkSync).mockReset();
@@ -188,3 +190,90 @@ it.each([-1, undefined])('retains abandoned recovery and release/reacquire for P
   lock.release();
   expect(fs.readdirSync(home)).toEqual([]);
 });
+
+it('pins the original inode through publication and replacement until release', () => {
+  const lock = createInstanceLock(path);
+  let fd!: number;
+  vi.mocked(fs.linkSync).mockImplementationOnce((source, destination) => {
+    fd = vi.mocked(fs.openSync).mock.results.at(-1)!.value as number;
+    // The original descriptor must still pin the complete private inode at publication.
+    expect(fs.fstatSync(fd).ino).toBe(fs.statSync(source).ino);
+    return fsOriginal.linkSync(source, destination);
+  });
+  try {
+    lock.acquire();
+    const original = fs.fstatSync(fd);
+    fs.rmSync(path);
+    fs.writeFileSync(path, JSON.stringify({ pid: process.pid, replacement: true }));
+    expect(fs.fstatSync(fd).ino).toBe(original.ino);
+    expect(fs.statSync(path).ino).not.toBe(original.ino);
+    lock.release();
+    expect(() => fs.fstatSync(fd)).toThrow(/EBADF/);
+    expect(JSON.parse(fs.readFileSync(path, 'utf8'))).toMatchObject({ replacement: true });
+  } finally {
+    lock.release();
+  }
+});
+
+it('retains the pinned descriptor when removal fails and closes it after release retry', () => {
+  const lock = createInstanceLock(path);
+  lock.acquire();
+  const fd = vi.mocked(fs.openSync).mock.results.at(-1)!.value as number;
+  const failure = new Error('remove denied');
+  vi.mocked(fs.rmSync).mockImplementationOnce(() => {
+    throw failure;
+  });
+  try {
+    expect(() => lock.release()).toThrow(failure);
+    expect(fs.fstatSync(fd).ino).toBe(fs.statSync(path).ino);
+  } finally {
+    lock.release();
+  }
+  expect(() => fs.fstatSync(fd)).toThrow(/EBADF/);
+});
+
+it('closes the owned descriptor when the lock pathname is already missing', () => {
+  const lock = createInstanceLock(path);
+  lock.acquire();
+  const fd = vi.mocked(fs.openSync).mock.results.at(-1)!.value as number;
+  fs.rmSync(path);
+  lock.release();
+  expect(() => fs.fstatSync(fd)).toThrow(/EBADF/);
+  lock.release();
+});
+
+it.each(['write', 'stat', 'publish', 'contention', 'read', 'temporary-cleanup'])(
+  'closes the acquisition descriptor on %s failure',
+  (failure) => {
+    const error = Object.assign(new Error('fixture failure'), { code: 'EIO' });
+    if (failure === 'contention' || failure === 'read') fs.writeFileSync(path, JSON.stringify({ pid: process.pid }));
+    if (failure === 'write')
+      vi.mocked(fs.writeFileSync).mockImplementationOnce(() => {
+        throw error;
+      });
+    if (failure === 'stat')
+      vi.mocked(fs.fstatSync).mockImplementationOnce(() => {
+        throw error;
+      });
+    if (failure === 'publish')
+      vi.mocked(fs.linkSync).mockImplementationOnce(() => {
+        throw error;
+      });
+    if (failure === 'read')
+      vi.mocked(fs.readFileSync).mockImplementationOnce(() => {
+        throw error;
+      });
+    if (failure === 'temporary-cleanup')
+      vi.mocked(fs.rmSync).mockImplementationOnce(() => {
+        throw error;
+      });
+    const lock = createInstanceLock(path);
+    expect(() => lock.acquire()).toThrow();
+    const fd = vi.mocked(fs.openSync).mock.results.at(-1)!.value as number;
+    expect(() => fs.fstatSync(fd)).toThrow(/EBADF/);
+    lock.release();
+    if (failure === 'contention' || failure === 'read')
+      expect(JSON.parse(fs.readFileSync(path, 'utf8')).pid).toBe(process.pid);
+    else expect(fs.existsSync(path)).toBe(false);
+  },
+);
