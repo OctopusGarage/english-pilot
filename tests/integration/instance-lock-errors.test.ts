@@ -12,6 +12,7 @@ vi.mock('node:fs', async (original) => {
     writeSync: vi.fn(fs.writeSync),
     writeFileSync: vi.fn(fs.writeFileSync),
     linkSync: vi.fn(fs.linkSync),
+    readFileSync: vi.fn(fs.readFileSync),
     rmSync: vi.fn(fs.rmSync),
   };
 });
@@ -27,6 +28,7 @@ afterEach(() => {
   vi.mocked(fs.writeSync).mockReset();
   vi.mocked(fs.writeFileSync).mockReset();
   vi.mocked(fs.linkSync).mockReset();
+  vi.mocked(fs.readFileSync).mockReset();
   vi.mocked(fs.rmSync).mockReset();
   fs.rmSync(home, { recursive: true, force: true });
 });
@@ -53,6 +55,46 @@ it('publishes a complete private record exclusively with mode 0600 and removes i
 });
 
 const fsOriginal = await vi.importActual<typeof import('node:fs')>('node:fs');
+
+it.each(['EACCES', 'EIO'])('fails closed on %s reading an existing lock and cleans its private file', (code) => {
+  const record = JSON.stringify({ pid: process.pid });
+  fs.writeFileSync(path, record);
+  const inode = fs.statSync(path).ino;
+  const failure = Object.assign(new Error(`${code}: unable to read ${path}`), { code, path });
+  vi.mocked(fs.readFileSync).mockImplementationOnce(() => {
+    throw failure;
+  });
+  const lock = createInstanceLock(path);
+  let caught: unknown;
+  try {
+    lock.acquire();
+  } catch (error) {
+    caught = error;
+  }
+  expect(caught).toBe(failure);
+  expect(fs.readFileSync(path, 'utf8')).toBe(record);
+  expect(fs.statSync(path).ino).toBe(inode);
+  expect(fs.readdirSync(home)).toEqual(['.instance.lock']);
+  lock.release();
+  expect(fs.readFileSync(path, 'utf8')).toBe(record);
+  // A failed read never claims ownership: retry still consults the real owner.
+  expect(() => lock.acquire()).toThrow(InstanceLockHeldError);
+  expect(fs.readdirSync(home)).toEqual(['.instance.lock']);
+});
+
+it('recovers when an existing lock disappears between publication contention and reading', () => {
+  fs.writeFileSync(path, JSON.stringify({ pid: process.pid }));
+  vi.mocked(fs.readFileSync).mockImplementationOnce((file, ...options) => {
+    fsOriginal.rmSync(path);
+    return fsOriginal.readFileSync(file, ...options);
+  });
+  const lock = createInstanceLock(path);
+  lock.acquire();
+  expect(JSON.parse(fs.readFileSync(path, 'utf8'))).toMatchObject({ pid: process.pid });
+  expect(fs.readdirSync(home)).toEqual(['.instance.lock']);
+  lock.release();
+  expect(fs.readdirSync(home)).toEqual([]);
+});
 
 it('does not reclaim an existing malformed lock when its private write fails', () => {
   fs.writeFileSync(path, '');

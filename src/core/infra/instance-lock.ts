@@ -82,8 +82,14 @@ export function createInstanceLock(lockPath: string, pid = process.pid): Instanc
 }
 
 function readLockPid(lockPath: string): number | undefined {
+  let raw: string;
   try {
-    const raw = readFileSync(lockPath, 'utf8');
+    raw = readFileSync(lockPath, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+  try {
     const parsed = JSON.parse(raw) as { pid?: unknown };
     return typeof parsed.pid === 'number' ? parsed.pid : undefined;
   } catch {

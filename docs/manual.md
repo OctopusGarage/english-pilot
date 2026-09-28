@@ -234,6 +234,8 @@ On shutdown, the daemon closes idle control connections and finishes already-adm
 
 The daemon publishes a fully written private instance-lock file atomically before startup, so concurrent startup cannot mistake an in-progress lock write for an abandoned lock. Publishing requires same-directory hard-link support; a publication error fails startup rather than removing another owner's lock.
 
+If an existing lock cannot be read because of permissions or an I/O error, startup fails and preserves that lock. Missing, malformed, and dead-owner records retain abandoned-lock recovery.
+
 WeChat POST request timeouts cover both waiting for response headers and reading the response body, including polling, send, and start/stop notifications.
 
 `service install` registers the built `dist` daemon with launchd on macOS or a user systemd service on Linux. On macOS, `service install-dev` installs a launchd service that points at this checkout and runs a dev supervisor. The supervisor watches `src/`, runs `pnpm run build` after changes, reloads the daemon only after a clean build, and keeps the last-good daemon running when the build fails. The service command is explicit; installing hooks or MCP servers does not automatically register a background process.
