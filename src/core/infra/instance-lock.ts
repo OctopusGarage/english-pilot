@@ -1,4 +1,5 @@
-import { closeSync, existsSync, openSync, readFileSync, rmSync, writeSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { closeSync, fstatSync, linkSync, lstatSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 
 export class InstanceLockHeldError extends Error {
   constructor(
@@ -16,41 +17,66 @@ export interface InstanceLock {
 }
 
 export function createInstanceLock(lockPath: string, pid = process.pid): InstanceLock {
-  let acquired = false;
+  let owned: { dev: number; ino: number } | undefined;
   return {
     acquire() {
-      if (acquired) return;
+      if (owned) return;
+      const temporaryPath = `${lockPath}.${randomUUID()}.tmp`;
+      let ownsTemporary = false;
+      let failure: unknown;
       try {
-        const fd = openSync(lockPath, 'wx', 0o600);
+        const fd = openSync(temporaryPath, 'wx', 0o600);
+        ownsTemporary = true;
+        let identity: { dev: number; ino: number };
         try {
-          writeSync(fd, JSON.stringify({ pid, acquiredAt: new Date().toISOString() }), undefined, 'utf8');
+          writeFileSync(fd, JSON.stringify({ pid, acquiredAt: new Date().toISOString() }), 'utf8');
+          identity = fstatSync(fd);
         } finally {
           closeSync(fd);
         }
-        acquired = true;
+        // Publish only a complete record; exclusive linking never exposes an empty lock.
+        for (;;) {
+          try {
+            linkSync(temporaryPath, lockPath);
+            owned = identity;
+            break;
+          } catch (error) {
+            // Only publication contention can justify examining an existing lock.
+            if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+            const lockPid = readLockPid(lockPath);
+            if (lockPid !== undefined && isProcessAlive(lockPid)) {
+              throw new InstanceLockHeldError(lockPath, lockPid);
+            }
+            rmSync(lockPath, { force: true });
+          }
+        }
       } catch (error) {
-        if (!existsSync(lockPath)) throw error;
-        const lockPid = readLockPid(lockPath);
-        if (lockPid === undefined) {
-          rmSync(lockPath, { force: true });
-          this.acquire();
-          return;
+        failure = error;
+      }
+      try {
+        if (ownsTemporary) rmSync(temporaryPath, { force: true });
+      } catch (error) {
+        failure ??= error;
+      }
+      if (failure !== undefined) {
+        // An acquisition that throws must not retain a published lock.
+        try {
+          this.release();
+        } catch {
+          // Keep the acquisition/temporary-cleanup error primary.
         }
-        if (lockPid !== undefined && !isProcessAlive(lockPid)) {
-          rmSync(lockPath, { force: true });
-          this.acquire();
-          return;
-        }
-        throw new InstanceLockHeldError(lockPath, lockPid);
+        throw failure;
       }
     },
     release() {
-      if (!acquired) return;
-      const lockPid = readLockPid(lockPath);
-      if (lockPid === pid || lockPid === undefined) {
-        rmSync(lockPath, { force: true });
+      if (!owned) return;
+      try {
+        const current = lstatSync(lockPath);
+        if (current.dev === owned.dev && current.ino === owned.ino) rmSync(lockPath, { force: true });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
       }
-      acquired = false;
+      owned = undefined;
     },
   };
 }
