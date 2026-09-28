@@ -12,6 +12,33 @@ export interface AgentSessionEntry {
   threadId?: string;
 }
 
+// Only pending turns are retained. A reset or saved replacement invalidates
+// their permission to mutate this scope, including turns with no saved session.
+const pendingTurns = new Map<string, Set<{ current: boolean }>>();
+
+export function trackAgentSessionTurn(scope: string): { isCurrent(): boolean; finish(): void } {
+  const key = pendingTurnKey(scope);
+  const turns = pendingTurns.get(key) ?? new Set<{ current: boolean }>();
+  const turn = { current: true };
+  turns.add(turn);
+  pendingTurns.set(key, turns);
+  return {
+    isCurrent: () => turn.current,
+    finish: () => {
+      turns.delete(turn);
+      if (turns.size === 0) pendingTurns.delete(key);
+    },
+  };
+}
+
+function invalidatePendingTurns(scope: string): void {
+  for (const turn of pendingTurns.get(pendingTurnKey(scope)) ?? []) turn.current = false;
+}
+
+function pendingTurnKey(scope: string): string {
+  return JSON.stringify([getEnglishPilotHome(), scope]);
+}
+
 export function getAgentSession(
   scope: string,
   backend: ExternalAgentBackend,
@@ -42,10 +69,12 @@ export function saveAgentSessionFromResult(
   };
   sessions[sessionKey(scope, result.backend, result.cwd)] = entry;
   writeAgentSessions(sessions);
+  invalidatePendingTurns(scope);
   return entry;
 }
 
 export function clearAgentSession(scope: string): boolean {
+  invalidatePendingTurns(scope);
   const sessions = readAgentSessions();
   let removed = false;
   for (const [key, entry] of Object.entries(sessions)) {

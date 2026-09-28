@@ -1,4 +1,5 @@
 import { once } from 'node:events';
+import { readFileSync } from 'node:fs';
 import { startControlServer, type ControlServer } from '../adapters/control/server.js';
 import type { ChannelRuntimeState, DaemonStatus } from '../adapters/control/protocol.js';
 import { loadFeishuChannelConfig } from '../channels/feishu/config.js';
@@ -92,10 +93,16 @@ export async function runDaemon(
     if (input.waitForever !== false) {
       await once(runtime.abortController.signal, 'abort');
     }
-    return result;
-  } finally {
-    await runtime.close();
+  } catch (error) {
+    try {
+      await runtime.close();
+    } catch {
+      // Preserve the runtime error after attempting every cleanup step.
+    }
+    throw error;
   }
+  await runtime.close();
+  return result;
 }
 
 export async function getDaemonStatusSnapshot(): Promise<DaemonStatusSnapshot> {
@@ -150,43 +157,84 @@ async function startDaemonRuntime(input: {
       cause: error,
     });
   }
-  const marker = markRunning(input.layout.runningMarkerPath);
   const abortController = new AbortController();
-  const controlServer = await startControlServer({
-    socketPath: input.layout.controlSocketPath,
-    getStatus: () => ({
-      ok: true,
-      pid: process.pid,
-      startedAt: marker.startedAt,
-      channels: input.initialChannels,
-    }),
-    deliverWeChatDailyReview: createWeChatDailyReviewDeliveryHandler({
-      channels: input.initialChannels,
-    }),
-  });
+  let controlServer: ControlServer | undefined;
+  const markerBefore = readMarkerContents(input.layout.runningMarkerPath);
+  let ownsMarker = false;
   const signalHandler = (): void => abortController.abort();
-  process.once('SIGINT', signalHandler);
-  process.once('SIGTERM', signalHandler);
-  input.logger.info(`EnglishPilot daemon started with pid ${process.pid}.`);
-  input.log?.(`EnglishPilot daemon control socket: ${input.layout.controlSocketPath}`);
-  return {
-    abortController,
-    close: async () => {
-      process.off('SIGINT', signalHandler);
-      process.off('SIGTERM', signalHandler);
-      await closeRuntime({ controlServer, lock, layout: input.layout, logger: input.logger });
-    },
+  const close = async (): Promise<void> => {
+    process.off('SIGINT', signalHandler);
+    process.off('SIGTERM', signalHandler);
+    abortController.abort();
+    await closeRuntime({ controlServer, ownsMarker, lock, layout: input.layout, logger: input.logger });
   };
+  // Lock ownership is established before touching the lifecycle marker/socket.
+  // Keep rollback active from the marker write through all startup callbacks.
+  try {
+    const marker = markRunning(input.layout.runningMarkerPath);
+    ownsMarker = true;
+    controlServer = await startControlServer({
+      socketPath: input.layout.controlSocketPath,
+      getStatus: () => ({
+        ok: true,
+        pid: process.pid,
+        startedAt: marker.startedAt,
+        channels: input.initialChannels,
+      }),
+      deliverWeChatDailyReview: createWeChatDailyReviewDeliveryHandler({
+        channels: input.initialChannels,
+      }),
+    });
+    process.once('SIGINT', signalHandler);
+    process.once('SIGTERM', signalHandler);
+    input.logger.info(`EnglishPilot daemon started with pid ${process.pid}.`);
+    input.log?.(`EnglishPilot daemon control socket: ${input.layout.controlSocketPath}`);
+    return {
+      abortController,
+      close,
+    };
+  } catch (error) {
+    // A failed write can still have created or truncated this attempt's marker.
+    // Preserve an unchanged marker that predates the attempt.
+    ownsMarker ||= readMarkerContents(input.layout.runningMarkerPath) !== markerBefore;
+    try {
+      await close();
+    } catch {
+      // Cleanup must attempt every owned resource and keep startup's error primary.
+    }
+    throw error;
+  }
 }
 
 async function closeRuntime(input: {
-  controlServer: ControlServer;
+  controlServer?: ControlServer;
+  ownsMarker: boolean;
   lock: InstanceLock;
   layout: RuntimeLayout;
   logger: RuntimeLogger;
 }): Promise<void> {
-  await input.controlServer.close();
-  markCleanShutdown(input.layout.runningMarkerPath);
-  input.lock.release();
+  const errors: unknown[] = [];
+  for (const cleanup of [
+    () => input.controlServer?.close(),
+    () => {
+      if (input.ownsMarker) markCleanShutdown(input.layout.runningMarkerPath);
+    },
+    () => input.lock.release(),
+  ]) {
+    try {
+      await cleanup();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (errors.length > 0) throw errors[0];
   input.logger.info('EnglishPilot daemon stopped cleanly.');
+}
+
+function readMarkerContents(path: string): string | undefined {
+  try {
+    return readFileSync(path, 'utf8');
+  } catch {
+    return undefined;
+  }
 }
