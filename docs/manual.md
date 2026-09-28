@@ -230,6 +230,8 @@ node dist/src/bin/english-pilot.js service restart
 
 `run` starts one process that loads configured Feishu/Lark and WeChat channels, writes a running marker, holds an instance lock, and exposes a local Unix control socket at `~/.english-pilot/run/english-pilot.sock`. `daemon status` reads the running daemon through that socket when available and falls back to local marker inspection when it is stopped.
 
+On shutdown, the daemon closes idle control connections and finishes already-admitted control deliveries before releasing its instance lock. A disconnected or timed-out client does not cancel an admitted delivery. WeChat polling cancels its retry/session waits and stops admitting messages or saving batch cursors after cancellation. A message handler or external request that has already started can still finish; the best-effort WeChat stop notification retains its existing request timeout. An interrupted batch keeps its previous cursor, so some messages may be replayed after restart.
+
 `service install` registers the built `dist` daemon with launchd on macOS or a user systemd service on Linux. On macOS, `service install-dev` installs a launchd service that points at this checkout and runs a dev supervisor. The supervisor watches `src/`, runs `pnpm run build` after changes, reloads the daemon only after a clean build, and keeps the last-good daemon running when the build fails. The service command is explicit; installing hooks or MCP servers does not automatically register a background process.
 
 Remote installations can be updated through the reusable helper:
