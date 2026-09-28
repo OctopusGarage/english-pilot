@@ -33,7 +33,18 @@ export async function startControlServer(input: {
       }
     });
   });
-  await listen(server, input.socketPath);
+  try {
+    await listen(server, input.socketPath);
+  } catch (error) {
+    if (server.listening) {
+      try {
+        await close(server);
+      } catch {
+        // Preserve the original listen/permission failure.
+      }
+    }
+    throw error;
+  }
   return {
     close: async () => {
       await close(server);
@@ -92,8 +103,12 @@ function listen(server: Server, socketPath: string): Promise<void> {
     server.once('error', reject);
     server.listen(socketPath, () => {
       server.off('error', reject);
-      chmodSync(socketPath, 0o600);
-      resolve();
+      try {
+        chmodSync(socketPath, 0o600);
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
     });
   });
 }

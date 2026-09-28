@@ -13,6 +13,8 @@ import { runCli } from '../../src/adapters/cli.js';
 import { loadFeishuChannelConfig } from '../../src/channels/feishu/config.js';
 import { buildFeishuEnvValues } from '../../src/channels/feishu/onboarding.js';
 import { handleFeishuMessage } from '../../src/channels/feishu/start.js';
+import { getAgentSession, saveAgentSessionFromResult } from '../../src/agent/session-store.js';
+import type { ExternalAgentRunResult, runExternalAgent } from '../../src/agent/runner.js';
 import { listLearningItems, listPromptEvents } from '../../src/storage/repository.js';
 
 describe('Feishu long-connection channel', () => {
@@ -304,6 +306,168 @@ describe('Feishu long-connection channel', () => {
     expect(reset).toMatchObject({ handled: true, replied: true, reason: 'new-session' });
     expect(sent.join('\n')).toContain('Started a new EnglishPilot agent session.');
     expect(sessionIds).toEqual([undefined, undefined]);
+  });
+
+  it.each(
+    (['claude', 'codex'] as const).flatMap((backend) =>
+      (['success', 'error', 'throw'] as const).flatMap((outcome) =>
+        (['reset', 'reset-and-replace', 'replace', 'unrelated-reset'] as const).map((change) => ({
+          backend,
+          outcome,
+          change,
+        })),
+      ),
+    ),
+  )('preserves $backend session state after $change during pending $outcome', async ({ backend, outcome, change }) => {
+    runCli(['config', 'set', 'externalAgentBackend', backend]);
+    const scope = 'feishu:chat-1:ou_allowed';
+    const config = {
+      appId: 'cli_xxx',
+      appSecret: 'secret',
+      allowedOpenIds: new Set(['ou_allowed']),
+      domain: 'feishu' as const,
+      replyMode: 'violation' as const,
+    };
+    const sent: string[] = [];
+    const channel = {
+      send: async (_chatId: string, input: SendInput): Promise<SendResult> => {
+        sent.push('markdown' in input ? input.markdown : '');
+        return { messageId: 'reply-message' };
+      },
+    };
+    const ids = (id: string) => (backend === 'claude' ? { sessionId: id } : { threadId: id });
+    const send = (text: string, runAgent: typeof runExternalAgent, chatId = 'chat-1') =>
+      handleFeishuMessage({
+        channel,
+        config,
+        message: messageFixture({ chatId, senderId: 'ou_allowed', content: text }),
+        runAgent,
+      });
+    let cwd = '';
+    await send('Remember the original context.', async (options) => {
+      cwd = options.cwd!;
+      return agentResult(backend, options.prompt, { ...ids('old-session'), cwd });
+    });
+    let finish!: (result: ExternalAgentRunResult) => void;
+    let fail!: (error: Error) => void;
+    let started!: () => void;
+    const pendingResult = new Promise<ExternalAgentRunResult>((resolve, reject) => {
+      finish = resolve;
+      fail = reject;
+    });
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const pending = send('Continue the original context.', async (options) => {
+      expect(options.sessionId ?? options.threadId).toBe('old-session');
+      started();
+      return pendingResult;
+    });
+    // Attach rejection handling before settling the deferred runner.
+    const pendingOutcome = pending.then(
+      (value) => ({ value }),
+      (error: unknown) => ({ error }),
+    );
+    await entered;
+    if (change === 'reset' || change === 'reset-and-replace') {
+      await expect(
+        send('/new', async () => {
+          throw new Error('/new must not run an agent');
+        }),
+      ).resolves.toMatchObject({ reason: 'new-session', replied: true });
+      expect(getAgentSession(scope, backend, cwd)).toBeUndefined();
+    }
+    if (change === 'reset-and-replace') {
+      await send('Start the fresh context.', async (options) => {
+        expect(options.sessionId ?? options.threadId).toBeUndefined();
+        return agentResult(backend, options.prompt, { ...ids('new-session'), cwd });
+      });
+    } else if (change === 'replace') {
+      saveAgentSessionFromResult(scope, agentResult(backend, '', { ...ids('new-session'), cwd }));
+    }
+    // A different conversation remains usable while this one is pending.
+    await send(
+      'Remember the unrelated context.',
+      async (options) => agentResult(backend, options.prompt, { ...ids('unrelated-session'), cwd }),
+      'chat-2',
+    );
+    if (change === 'unrelated-reset') {
+      await send(
+        '/new',
+        async () => {
+          throw new Error('/new must not run an agent');
+        },
+        'chat-2',
+      );
+    }
+    if (outcome === 'throw') fail(new Error('runner rejected'));
+    else
+      finish({
+        ...agentResult(backend, '', { ...ids('old-session'), cwd }),
+        exitCode: outcome === 'error' ? 1 : 0,
+        stderr: outcome === 'error' ? 'agent failed' : '',
+      });
+    const completed = await pendingOutcome;
+    if (outcome === 'throw') expect(completed).toHaveProperty('error.message', 'runner rejected');
+    else expect(completed).toHaveProperty('value.replied', outcome === 'success');
+    const expected =
+      change === 'unrelated-reset'
+        ? outcome === 'error'
+          ? undefined
+          : 'old-session'
+        : change === 'reset'
+          ? undefined
+          : 'new-session';
+    const current = getAgentSession(scope, backend, cwd);
+    expect(current?.sessionId ?? current?.threadId).toBe(expected);
+    const unrelated = getAgentSession('feishu:chat-2:ou_allowed', backend, cwd);
+    if (change === 'unrelated-reset') expect(unrelated).toBeUndefined();
+    else expect(unrelated).toMatchObject(ids('unrelated-session'));
+    await send('Continue the current context.', async (options) => {
+      expect(options.sessionId ?? options.threadId).toBe(expected);
+      return agentResult(backend, options.prompt, { ...ids('next-session'), cwd });
+    });
+    expect(getAgentSession(scope, backend, cwd)).toMatchObject(ids('next-session'));
+    if (outcome === 'success') expect(sent).toContain('Agent reply');
+  });
+
+  it('keeps /new effective when a pending first turn has no persisted session', async () => {
+    runCli(['config', 'set', 'externalAgentBackend', 'claude']);
+    const config = {
+      appId: 'cli_xxx',
+      appSecret: 'secret',
+      allowedOpenIds: new Set(['ou_allowed']),
+      domain: 'feishu' as const,
+      replyMode: 'violation' as const,
+    };
+    let finish!: (result: ExternalAgentRunResult) => void;
+    let started!: () => void;
+    let cwd = '';
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const pendingResult = new Promise<ExternalAgentRunResult>((resolve) => {
+      finish = resolve;
+    });
+    const pending = handleFeishuMessage({
+      channel: fakeChannel(),
+      config,
+      message: messageFixture({ chatId: 'chat-1', senderId: 'ou_allowed', content: 'Start the first context.' }),
+      runAgent: async (options) => {
+        cwd = options.cwd!;
+        started();
+        return pendingResult;
+      },
+    });
+    await entered;
+    await handleFeishuMessage({
+      channel: fakeChannel(),
+      config,
+      message: messageFixture({ chatId: 'chat-1', senderId: 'ou_allowed', content: '/new' }),
+    });
+    finish(agentResult('claude', '', { sessionId: 'stale-first-session', cwd }));
+    await pending;
+    expect(getAgentSession('feishu:chat-1:ou_allowed', 'claude', cwd)).toBeUndefined();
   });
 
   it('transcribes Feishu audio messages before applying the normal agent flow', async () => {
