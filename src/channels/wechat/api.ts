@@ -217,7 +217,7 @@ async function apiPost(
       }),
       ...(signal ? { signal } : {}),
     });
-    return readJsonResponse(response, input.endpoint);
+    return await readJsonResponse(response, input.endpoint);
   } finally {
     if (timeout) clearTimeout(timeout);
   }
