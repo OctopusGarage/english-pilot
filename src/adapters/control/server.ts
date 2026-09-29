@@ -19,38 +19,77 @@ export async function startControlServer(input: {
   ) => Promise<WeChatDailyReviewDaemonDeliveryResult> | WeChatDailyReviewDaemonDeliveryResult;
 }): Promise<ControlServer> {
   if (existsSync(input.socketPath)) rmSync(input.socketPath, { force: true });
+  const sockets = new Map<Socket, number>();
+  const requests = new Set<Promise<void>>();
+  let closing = false;
+  let closingPromise: Promise<void> | undefined;
   const server = createServer((socket) => {
+    if (closing) {
+      socket.destroy();
+      return;
+    }
+    sockets.set(socket, 0);
+    socket.once('close', () => sockets.delete(socket));
+    socket.on('error', () => socket.destroy());
     let buffer = '';
     socket.setEncoding('utf8');
     socket.on('data', (chunk) => {
+      if (closing) return;
       buffer += chunk;
       let newline = buffer.indexOf('\n');
-      while (newline >= 0) {
+      while (newline >= 0 && !closing) {
         const line = buffer.slice(0, newline);
         buffer = buffer.slice(newline + 1);
-        void handleLine(line, socket, input);
+        sockets.set(socket, (sockets.get(socket) ?? 0) + 1);
+        const request = Promise.resolve()
+          .then(() => handleLine(line, socket, input))
+          .catch(() => {
+            socket.destroy();
+          })
+          .finally(() => {
+            requests.delete(request);
+            if (!sockets.has(socket)) return;
+            const active = sockets.get(socket)! - 1;
+            sockets.set(socket, active);
+            if (closing && active === 0) socket.destroy();
+          });
+        requests.add(request);
         newline = buffer.indexOf('\n');
       }
     });
   });
+  const shutdown = (): Promise<void> => {
+    closingPromise ??= (async () => {
+      closing = true;
+      // Observe listener errors immediately, but drain admitted work before throwing.
+      const stopped = close(server).then(
+        () => undefined,
+        (error: unknown) => ({ error }),
+      );
+      for (const [socket, active] of sockets) {
+        if (active === 0) socket.destroy();
+      }
+      await Promise.all(requests);
+      for (const socket of sockets.keys()) socket.destroy();
+      const failure = await stopped;
+      if (failure) throw failure.error;
+      if (existsSync(input.socketPath)) rmSync(input.socketPath, { force: true });
+    })();
+    return closingPromise;
+  };
   try {
     await listen(server, input.socketPath);
   } catch (error) {
     if (server.listening) {
       try {
-        await close(server);
+        await shutdown();
       } catch {
         // Preserve the original listen/permission failure.
       }
     }
     throw error;
   }
-  return {
-    close: async () => {
-      await close(server);
-      if (existsSync(input.socketPath)) rmSync(input.socketPath, { force: true });
-    },
-  };
+  return { close: shutdown };
 }
 
 async function handleLine(
@@ -64,7 +103,10 @@ async function handleLine(
   },
 ): Promise<void> {
   const response = await buildResponse(line, input);
-  socket.write(`${JSON.stringify(response)}\n`);
+  if (socket.destroyed || socket.writableEnded) return;
+  await new Promise<void>((resolve) => {
+    socket.write(`${JSON.stringify(response)}\n`, () => resolve());
+  });
 }
 
 async function buildResponse(

@@ -24,7 +24,10 @@ export async function runWeChatUpdateStream(input: WeChatUpdateStreamInput): Pro
   const getUpdates = input.getUpdates ?? getWeChatUpdates;
   const notifyStart = input.notifyStart ?? notifyWeChatStart;
   const notifyStop = input.notifyStop ?? notifyWeChatStop;
-  const wait = input.sleep ?? sleep;
+  const wait = (ms: number): Promise<void> => {
+    if (input.abortSignal?.aborted) return Promise.resolve();
+    return input.sleep ? input.sleep(ms) : sleep(ms, input.abortSignal);
+  };
   const logger = input.logger?.child({
     component: 'wechat',
     accountId: input.account.accountId,
@@ -43,6 +46,7 @@ export async function runWeChatUpdateStream(input: WeChatUpdateStreamInput): Pro
           abortSignal: input.abortSignal,
           botAgent: input.botAgent,
         });
+        if (input.abortSignal?.aborted) break;
         if (failures > 0) {
           input.log?.(
             `WeChat getupdates recovered after ${failures} failed ${failures === 1 ? 'attempt' : 'attempts'} for ${input.account.accountId}.`,
@@ -53,6 +57,7 @@ export async function runWeChatUpdateStream(input: WeChatUpdateStreamInput): Pro
         }
         failures = 0;
       } catch (error) {
+        if (input.abortSignal?.aborted) break;
         failures += 1;
         const delayMs = reconnectDelayMs(failures);
         input.log?.(
@@ -89,6 +94,7 @@ export async function runWeChatUpdateStream(input: WeChatUpdateStreamInput): Pro
             error: errorSummary(error),
           });
         }
+        if (input.abortSignal?.aborted) break;
         await wait(60_000);
         continue;
       }
@@ -113,6 +119,7 @@ export async function runWeChatUpdateStream(input: WeChatUpdateStreamInput): Pro
         logger?.debug('wechat.getupdates.timeout_updated', 'WeChat long polling timeout updated.', { timeoutMs });
       }
       for (const message of updates.msgs ?? []) {
+        if (input.abortSignal?.aborted) break;
         logger?.info('wechat.message.received', 'WeChat message received from update stream.', {
           messageId: message.message_id,
           fromUserId: message.from_user_id,
@@ -120,6 +127,7 @@ export async function runWeChatUpdateStream(input: WeChatUpdateStreamInput): Pro
         });
         await input.onMessage(message);
       }
+      if (input.abortSignal?.aborted) break;
       if (updates.get_updates_buf) {
         cursor = updates.get_updates_buf;
         saveWeChatSyncCursor(input.account.accountId, cursor);
@@ -154,9 +162,19 @@ function reconnectDelayMs(failures: number): number {
   return Math.min(60_000, 3_000 * 2 ** Math.max(0, failures - 1));
 }
 
-function sleep(ms: number): Promise<void> {
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
-    setTimeout(resolve, ms);
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    const finish = (): void => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', finish);
+      resolve();
+    };
+    const timer = setTimeout(finish, ms);
+    signal?.addEventListener('abort', finish, { once: true });
   });
 }
 
