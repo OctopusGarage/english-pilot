@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { getEnglishPilotHome, loadConfig } from './config.js';
+import { writePrivateRuntimeFile } from './infra/state-dir.js';
 
 export interface GlossaryEntry {
   term: string;
@@ -73,8 +74,13 @@ export function removeGlossaryEntry(term: string): boolean {
 
 function writeGlossaryEntries(entries: GlossaryEntry[]): void {
   const path = getGlossaryPath();
+  const content = `${JSON.stringify(entries, null, 2)}\n`;
+  if (path === join(getEnglishPilotHome(), 'glossary.json')) {
+    writePrivateRuntimeFile(path, content);
+    return;
+  }
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, `${JSON.stringify(entries, null, 2)}\n`, 'utf8');
+  writeFileSync(path, content, 'utf8');
 }
 
 function isGlossaryEntry(value: unknown): value is GlossaryEntry {

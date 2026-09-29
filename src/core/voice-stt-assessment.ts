@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { getRuntimeHome } from './infra/state-dir.js';
+import { getRuntimeHome, writePrivateRuntimeFile } from './infra/state-dir.js';
 import { validateVoiceSttResponse, type VoiceSttValidationResult } from './voice-stt-contract.js';
 
 export interface VoiceSttProviderAssessment {
@@ -123,9 +123,8 @@ function assessmentHistoryPath(): string {
 }
 
 function appendJsonLine(path: string, value: unknown): void {
-  mkdirSync(getRuntimeHome(), { recursive: true });
   const existing = existsSync(path) ? readFileSync(path, 'utf8') : '';
-  writeFileSync(path, `${existing}${JSON.stringify(value)}\n`, 'utf8');
+  writePrivateRuntimeFile(path, `${existing}${JSON.stringify(value)}\n`);
 }
 
 function readJsonLines<T>(path: string): T[] {

@@ -1,6 +1,6 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getEnglishPilotHome } from '../core/config.js';
+import { writePrivateRuntimeFile } from '../core/infra/state-dir.js';
 import {
   buildDailyReviewAnswer,
   buildDailyReviewItems,
@@ -121,8 +121,7 @@ export function runDaily(args: string[]): CliResult {
     const path = join(getEnglishPilotHome(), 'reviews', `${date}.md`);
     const shouldWrite = args.includes('--write');
     if (shouldWrite) {
-      mkdirSync(join(getEnglishPilotHome(), 'reviews'), { recursive: true });
-      writeFileSync(path, pack.markdown, 'utf8');
+      writePrivateRuntimeFile(path, pack.markdown);
     }
     return {
       exitCode: 0,

@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { doctor, getEnglishPilotHome, writeDoctorMarkdown } from '../core/config.js';
+import { ensurePrivateRuntimeDirectory, writePrivateRuntimeFile } from '../core/infra/state-dir.js';
 import { getDaemonStatusSnapshot } from '../daemon/run-daemon.js';
 import { buildExternalValidationBundle, verifyExternalValidationBundle } from '../core/external-validation-bundle.js';
 import { listGlossaryEntries, removeGlossaryEntry, upsertGlossaryEntry } from '../core/glossary.js';
@@ -107,9 +108,13 @@ export function runExport(args: string[]): CliResult {
         stderr: 'Usage: english-pilot export obsidian --write [--dir path]\n',
       };
     }
-    mkdirSync(dir, { recursive: true });
+    const defaultDirectory = join(getEnglishPilotHome(), 'obsidian');
+    if (dir === defaultDirectory) ensurePrivateRuntimeDirectory(dir);
+    else mkdirSync(dir, { recursive: true });
     for (const file of exportLearningItemsObsidianFiles()) {
-      writeFileSync(join(dir, file.path), file.content, 'utf8');
+      const path = join(dir, file.path);
+      if (dir === defaultDirectory) writePrivateRuntimeFile(path, file.content);
+      else writeFileSync(path, file.content, 'utf8');
     }
     return {
       exitCode: 0,

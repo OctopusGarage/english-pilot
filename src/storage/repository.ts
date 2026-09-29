@@ -1,8 +1,9 @@
 import { createRequire } from 'node:module';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AnalysisResult, PolicyDecision } from '../core/types.js';
 import { getEnglishPilotHome, loadConfig } from '../core/config.js';
+import { ensureRuntimeHome } from '../core/infra/state-dir.js';
 import type { PromptEvent } from '../core/prompt-event.js';
 import { normalizeReviewSchedulingState, type ReviewOutcome } from '../core/review-scheduler.js';
 import {
@@ -370,12 +371,13 @@ const sqliteStorageAdapter: StorageAdapter = {
 };
 
 function writeLearningItems(items: LearningItem[]): void {
-  mkdirSync(getEnglishPilotHome(), { recursive: true });
-  writeFileSync(
-    learningItemsPath(),
-    items.length > 0 ? `${items.map((candidate) => JSON.stringify(candidate)).join('\n')}\n` : '',
-    'utf8',
-  );
+  ensureRuntimeHome();
+  const path = learningItemsPath();
+  writeFileSync(path, items.length > 0 ? `${items.map((candidate) => JSON.stringify(candidate)).join('\n')}\n` : '', {
+    encoding: 'utf8',
+    mode: 0o600,
+  });
+  chmodSync(path, 0o600);
 }
 
 function promptEventsPath(): string {
@@ -395,10 +397,11 @@ function useJsonlStorage(): boolean {
 }
 
 function withDatabase<T>(operation: (db: DatabaseSyncLike) => T): T {
-  mkdirSync(getEnglishPilotHome(), { recursive: true });
+  ensureRuntimeHome();
   const sqlite = require('node:sqlite') as { DatabaseSync: new (path: string) => DatabaseSyncLike };
   const db = new sqlite.DatabaseSync(sqlitePath());
   try {
+    chmodSync(sqlitePath(), 0o600);
     db.exec('PRAGMA busy_timeout = 5000;');
     ensureSchema(db);
     return operation(db);
@@ -472,9 +475,10 @@ function ensureSchema(db: DatabaseSyncLike): void {
 }
 
 function appendJsonLine(path: string, value: unknown): void {
-  mkdirSync(getEnglishPilotHome(), { recursive: true });
+  ensureRuntimeHome();
   const existing = existsSync(path) ? readFileSync(path, 'utf8') : '';
-  writeFileSync(path, `${existing}${JSON.stringify(value)}\n`, 'utf8');
+  writeFileSync(path, `${existing}${JSON.stringify(value)}\n`, { encoding: 'utf8', mode: 0o600 });
+  chmodSync(path, 0o600);
 }
 
 function readJsonLines<T>(path: string): T[] {

@@ -1,6 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getEnglishPilotHome } from '../core/config.js';
+import { writePrivateRuntimeFile } from '../core/infra/state-dir.js';
 import type { IntegrationAccountValidationResult, IntegrationAccountValidationStage } from './account-validation.js';
 import type { IntegrationTargetId, IntegrationTargetStatus } from './targets.js';
 import type { IntegrationTarget } from './targets.js';
@@ -128,9 +129,8 @@ function validationHistoryPath(): string {
 }
 
 function appendJsonLine(path: string, value: unknown): void {
-  mkdirSync(getEnglishPilotHome(), { recursive: true });
   const existing = existsSync(path) ? readFileSync(path, 'utf8') : '';
-  writeFileSync(path, `${existing}${JSON.stringify(value)}\n`, 'utf8');
+  writePrivateRuntimeFile(path, `${existing}${JSON.stringify(value)}\n`);
 }
 
 function readJsonLines<T>(path: string): T[] {
