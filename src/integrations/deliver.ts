@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { ensurePrivateRuntimeDirectory, getRuntimeHome, writePrivateRuntimeFile } from '../core/infra/state-dir.js';
 import type { DailyReviewIntegrationPayload } from './daily-pack.js';
 import type { IntegrationTarget } from './targets.js';
 
@@ -21,8 +22,13 @@ export function deliverObsidianDailyReview(
 ): DailyReviewDeliveryResult {
   const path = join(directory, `${payload.pack.date}.md`);
   if (write) {
-    mkdirSync(directory, { recursive: true });
-    writeFileSync(path, payload.pack.markdown, 'utf8');
+    if (directory === join(getRuntimeHome(), 'integrations', 'obsidian')) {
+      ensurePrivateRuntimeDirectory(directory);
+      writePrivateRuntimeFile(path, payload.pack.markdown);
+    } else {
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(path, payload.pack.markdown, 'utf8');
+    }
   }
   return {
     target,

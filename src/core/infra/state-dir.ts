@@ -1,6 +1,6 @@
-import { chmodSync, mkdirSync } from 'node:fs';
+import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 
 export interface RuntimeLayout {
   home: string;
@@ -47,6 +47,25 @@ export function ensureRuntimeHome(): string {
   const home = getRuntimeHome();
   mkdirPrivate(home);
   return home;
+}
+
+export function ensurePrivateRuntimeDirectory(directory: string): void {
+  const home = ensureRuntimeHome();
+  const relativePath = relative(home, directory);
+  if (relativePath === '..' || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath)) {
+    throw new Error('Private runtime directory must be inside the runtime home.');
+  }
+  let current = home;
+  for (const segment of relativePath.split(sep).filter(Boolean)) {
+    current = join(current, segment);
+    mkdirPrivate(current);
+  }
+}
+
+export function writePrivateRuntimeFile(path: string, content: string): void {
+  ensurePrivateRuntimeDirectory(dirname(path));
+  writeFileSync(path, content, { encoding: 'utf8', mode: 0o600 });
+  chmodSync(path, 0o600);
 }
 
 function mkdirPrivate(path: string): void {
