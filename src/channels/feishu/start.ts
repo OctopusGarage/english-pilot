@@ -67,6 +67,13 @@ export async function startFeishuChannel(
       message,
       log: input.log,
       logger: input.logger,
+    }).catch((error: unknown) => {
+      const detail = error instanceof Error ? error.message : String(error);
+      input.log?.(`Failed to handle Feishu message ${message.messageId}: ${detail}`);
+      input.logger?.warn('feishu.message.handler_failed', 'Failed to handle Feishu message.', {
+        messageId: message.messageId,
+        error: detail,
+      });
     });
   });
   await channel.connect();
