@@ -1,4 +1,4 @@
-import { accessSync, constants, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { accessSync, chmodSync, constants, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { EnglishPilotConfig } from './types.js';
@@ -12,7 +12,7 @@ import {
   type VoiceSttProviderAssessmentRecord,
 } from './voice-stt-assessment.js';
 import { detectUncleanRestart } from './infra/lifecycle.js';
-import { ensureRuntimeLayout, getRuntimeHome } from './infra/state-dir.js';
+import { ensureRuntimeHome, ensureRuntimeLayout, getRuntimeHome } from './infra/state-dir.js';
 
 export function getEnglishPilotHome(): string {
   return getRuntimeHome();
@@ -204,9 +204,10 @@ function inspectDaemon(): DoctorReport['daemon'] {
 
 export function saveConfig(config: EnglishPilotConfig): void {
   const validConfig = validateConfig(config);
-  const home = getEnglishPilotHome();
-  mkdirSync(home, { recursive: true });
-  writeFileSync(`${getConfigPath()}\n`.trim(), `${JSON.stringify(validConfig, null, 2)}\n`, 'utf8');
+  ensureRuntimeHome();
+  const path = getConfigPath();
+  writeFileSync(path, `${JSON.stringify(validConfig, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+  chmodSync(path, 0o600);
 }
 
 export function setConfigValue(key: string, value: string): EnglishPilotConfig {

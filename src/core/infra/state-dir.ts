@@ -37,10 +37,16 @@ export function getRuntimeLayout(): RuntimeLayout {
 
 export function ensureRuntimeLayout(): RuntimeLayout {
   const layout = getRuntimeLayout();
-  mkdirPrivate(layout.home);
+  ensureRuntimeHome();
   mkdirPrivate(layout.logsDir);
   mkdirPrivate(layout.runDir);
   return layout;
+}
+
+export function ensureRuntimeHome(): string {
+  const home = getRuntimeHome();
+  mkdirPrivate(home);
+  return home;
 }
 
 function mkdirPrivate(path: string): void {
