@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -13,6 +13,8 @@ import {
   listWeChatAccounts,
   loadWeChatSyncCursor,
   saveWeChatAccount,
+  saveWeChatContextToken,
+  saveWeChatSyncCursor,
 } from '../../src/channels/wechat/state.js';
 import { runWeChatUpdateStream } from '../../src/channels/wechat/update-stream.js';
 import { listLearningItems, listPromptEvents } from '../../src/storage/repository.js';
@@ -145,6 +147,64 @@ describe('WeChat long-connection channel', () => {
     expect(logs).toContain('Scan this QR code with WeChat to connect EnglishPilot:');
     expect(listWeChatAccounts()).toHaveLength(1);
     expect(statSync(join(getWeChatAccountsDir(), 'bot-im-wechat.json')).mode & 0o077).toBe(0);
+  });
+
+  it('creates a private WeChat state tree for QR onboarding in a fresh home under umask 022', async () => {
+    process.env.ENGLISH_PILOT_HOME = join(home, 'fresh-home');
+    const previousUmask = process.umask(0o022);
+    try {
+      const result = await runWeChatOnboarding({
+        timeoutMs: 1000,
+        pollIntervalMs: 0,
+        log: () => undefined,
+        fetch: async (url) =>
+          jsonResponse(
+            String(url).includes('get_bot_qrcode')
+              ? { qrcode: 'qr-token', qrcode_img_content: 'https://wechat.example.test/qr' }
+              : { status: 'confirmed', ilink_bot_id: 'bot@im.wechat', bot_token: 'secret-token' },
+          ),
+      });
+
+      expect(result.connected).toBe(true);
+      for (const path of [process.env.ENGLISH_PILOT_HOME, join(home, 'fresh-home', 'wechat'), getWeChatAccountsDir()]) {
+        expect(statSync(path).mode & 0o777).toBe(0o700);
+      }
+      for (const path of [
+        join(getWeChatAccountsDir(), 'bot-im-wechat.json'),
+        join(home, 'fresh-home', 'wechat', 'accounts.json'),
+      ]) {
+        expect(statSync(path).mode & 0o777).toBe(0o600);
+      }
+    } finally {
+      process.umask(previousUmask);
+    }
+  });
+
+  it('tightens existing loose WeChat directories and files when writing state', () => {
+    mkdirSync(getWeChatAccountsDir(), { recursive: true, mode: 0o755 });
+    const accountPath = join(getWeChatAccountsDir(), 'bot-im-bot.json');
+    const indexPath = join(home, 'wechat', 'accounts.json');
+    const cursorPath = join(getWeChatAccountsDir(), 'bot-im-bot.sync.json');
+    const contextPath = join(getWeChatAccountsDir(), 'bot-im-bot.context-tokens.json');
+    for (const path of [home, join(home, 'wechat'), getWeChatAccountsDir()]) {
+      chmodSync(path, 0o755);
+    }
+    for (const path of [accountPath, indexPath, cursorPath, contextPath]) {
+      writeFileSync(path, '{}\n', { mode: 0o644 });
+      chmodSync(path, 0o644);
+    }
+
+    saveWeChatAccount({ accountId: 'bot-im-bot', token: 'secret-token' });
+    saveWeChatSyncCursor('bot-im-bot', 'cursor-token');
+    saveWeChatContextToken('bot-im-bot', 'user-id', 'context-token');
+
+    for (const path of [home, join(home, 'wechat'), getWeChatAccountsDir()]) {
+      expect(statSync(path).mode & 0o777).toBe(0o700);
+    }
+    for (const path of [accountPath, indexPath, cursorPath, contextPath]) {
+      expect(statSync(path).mode & 0o777).toBe(0o600);
+    }
+    expect(loadWeChatSyncCursor('bot-im-bot')).toBe('cursor-token');
   });
 
   it('skips malformed saved account files when loading WeChat channel readiness', () => {
