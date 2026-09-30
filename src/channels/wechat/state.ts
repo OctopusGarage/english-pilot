@@ -1,6 +1,7 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { getEnglishPilotHome } from '../../core/config.js';
+import { ensurePrivateRuntimeDirectory, writePrivateRuntimeFile } from '../../core/infra/state-dir.js';
 
 export interface WeChatAccount {
   accountId: string;
@@ -60,7 +61,6 @@ export function saveWeChatAccount(input: {
     ...(input.userId?.trim() ? { userId: input.userId.trim() } : {}),
     savedAt: input.savedAt ?? new Date().toISOString(),
   };
-  mkdirSync(getWeChatAccountsDir(), { recursive: true });
   writeJsonSecure(accountPath(accountId), account);
   registerAccountId(accountId);
   return account;
@@ -162,11 +162,7 @@ function contextTokenPath(accountId: string): string {
 }
 
 function writeJsonSecure(path: string, value: unknown): void {
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
-  try {
-    chmodSync(path, 0o600);
-  } catch {
-    // Best-effort on non-POSIX filesystems.
-  }
+  ensurePrivateRuntimeDirectory(dirname(path));
+  if (existsSync(path)) chmodSync(path, 0o600);
+  writePrivateRuntimeFile(path, `${JSON.stringify(value, null, 2)}\n`);
 }
