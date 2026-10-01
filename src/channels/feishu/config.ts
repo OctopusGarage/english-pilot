@@ -1,4 +1,14 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  constants,
+  existsSync,
+  fchmodSync,
+  ftruncateSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join } from 'node:path';
 import { getEnglishPilotHome } from '../../core/config.js';
 
@@ -76,7 +86,7 @@ export function writeFeishuEnvFile(
   values: Record<string, string>,
   envPath = getFeishuEnvPath(),
 ): { written: true; path: string } {
-  mkdirSync(dirname(envPath), { recursive: true });
+  mkdirSync(dirname(envPath), { recursive: true, mode: 0o700 });
   const content = [
     '# Managed by english-pilot feishu setup',
     `FEISHU_APP_ID=${quoteEnv(values.FEISHU_APP_ID ?? '')}`,
@@ -88,11 +98,13 @@ export function writeFeishuEnvFile(
     `FEISHU_PROCESSING_ACK_TEXT=${quoteEnv(values.FEISHU_PROCESSING_ACK_TEXT ?? 'Received. Working on it...')}`,
     '',
   ].join('\n');
-  writeFileSync(envPath, content, 'utf8');
+  const fd = openSync(envPath, constants.O_WRONLY | constants.O_CREAT, 0o600);
   try {
-    chmodSync(envPath, 0o600);
-  } catch {
-    // Best-effort on non-POSIX filesystems.
+    fchmodSync(fd, 0o600);
+    ftruncateSync(fd, 0);
+    writeFileSync(fd, content, 'utf8');
+  } finally {
+    closeSync(fd);
   }
   return { written: true, path: envPath };
 }

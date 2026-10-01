@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type {
@@ -10,7 +10,7 @@ import type {
 } from '@larksuiteoapi/node-sdk';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runCli } from '../../src/adapters/cli.js';
-import { loadFeishuChannelConfig } from '../../src/channels/feishu/config.js';
+import { loadFeishuChannelConfig, writeFeishuEnvFile } from '../../src/channels/feishu/config.js';
 import { buildFeishuEnvValues } from '../../src/channels/feishu/onboarding.js';
 import { handleFeishuMessage } from '../../src/channels/feishu/start.js';
 import { getAgentSession, saveAgentSessionFromResult } from '../../src/agent/session-store.js';
@@ -55,6 +55,38 @@ describe('Feishu long-connection channel', () => {
       FEISHU_PROCESSING_ACK: 'on',
       FEISHU_PROCESSING_ACK_TEXT: 'Received. Working on it...',
     });
+  });
+
+  it('creates a private Feishu credential directory and file under umask 022', () => {
+    const previousUmask = process.umask(0o022);
+    try {
+      const envPath = join(home, 'credentials', 'feishu.env');
+      writeFeishuEnvFile({ FEISHU_APP_SECRET: 'new-secret' }, envPath);
+
+      expect(statSync(join(home, 'credentials')).mode & 0o777).toBe(0o700);
+      expect(statSync(envPath).mode & 0o777).toBe(0o600);
+      expect(readFileSync(envPath, 'utf8')).toContain('FEISHU_APP_SECRET="new-secret"');
+    } finally {
+      process.umask(previousUmask);
+    }
+  });
+
+  it('tightens an existing Feishu credential file before updating its secret', () => {
+    const previousUmask = process.umask(0o022);
+    try {
+      const envPath = join(home, 'feishu.env');
+      writeFileSync(envPath, 'FEISHU_APP_SECRET="old-secret"\n', { mode: 0o644 });
+      chmodSync(envPath, 0o644);
+
+      writeFeishuEnvFile({ FEISHU_APP_SECRET: 'replacement-secret' }, envPath);
+
+      expect(statSync(envPath).mode & 0o777).toBe(0o600);
+      const content = readFileSync(envPath, 'utf8');
+      expect(content).toContain('FEISHU_APP_SECRET="replacement-secret"');
+      expect(content).not.toContain('old-secret');
+    } finally {
+      process.umask(previousUmask);
+    }
   });
 
   it('loads config from ~/.english-pilot/feishu.env and supports dry-run doctor output', () => {
