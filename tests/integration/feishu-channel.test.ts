@@ -119,6 +119,33 @@ describe('Feishu long-connection channel', () => {
     });
   });
 
+  it('redacts the app secret from Feishu doctor JSON while preserving readiness details', () => {
+    const fakeSecret = 'fake-feishu-secret-for-doctor-test';
+    writeFeishuEnvFile({
+      FEISHU_APP_ID: 'cli_doctor_test',
+      FEISHU_APP_SECRET: fakeSecret,
+      FEISHU_ALLOWED_OPEN_IDS: 'ou_user',
+      FEISHU_DOMAIN: 'lark',
+    });
+
+    const result = runCli(['feishu', 'doctor', '--json']);
+    const report = JSON.parse(result.stdout);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout).not.toContain(fakeSecret);
+    expect(report).toMatchObject({
+      ok: true,
+      missing: [],
+      config: {
+        appId: 'cli_doctor_test',
+        appSecret: '***',
+        domain: 'lark',
+        replyMode: 'violation',
+      },
+    });
+  });
+
   it('records blocked Feishu messages and replies only for allowed users', async () => {
     const sent: Array<{ chatId: string; markdown: string }> = [];
     const config = {

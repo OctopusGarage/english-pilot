@@ -14,7 +14,9 @@ export function runFeishu(args: string[]): CliResult {
     const report = loadFeishuChannelConfig();
     return {
       exitCode: report.ok ? 0 : 1,
-      stdout: args.includes('--json') ? `${JSON.stringify(report, null, 2)}\n` : formatFeishuChannelDoctor(report),
+      stdout: args.includes('--json')
+        ? `${JSON.stringify(report, redactSecrets, 2)}\n`
+        : formatFeishuChannelDoctor(report),
       stderr: '',
     };
   }
