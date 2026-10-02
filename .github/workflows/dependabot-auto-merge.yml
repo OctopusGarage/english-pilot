@@ -5,6 +5,7 @@ on:
     types: [opened, synchronize, reopened]
 
 permissions:
+  actions: read
   contents: write
   pull-requests: write
 
@@ -14,6 +15,7 @@ jobs:
       github.event.pull_request.user.login == 'dependabot[bot]' ||
       github.event.pull_request.user.login == 'app/dependabot'
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - name: Retarget Dependabot PR to dev
         if: github.event.pull_request.base.ref != 'dev'
@@ -39,11 +41,45 @@ jobs:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Enable auto-merge into dev
+      - name: Merge Dependabot PR after CI
         if: >-
           steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
           steps.metadata.outputs.update-type == 'version-update:semver-minor'
-        run: gh pr merge --auto --squash "$PR_URL"
+        run: |
+          set -euo pipefail
+
+          pr_state=$(gh pr view "$PR_URL" --json headRefOid,headRefName,baseRefName,baseRefOid,state --jq '[.headRefOid, .headRefName, .baseRefName, .baseRefOid, .state] | @tsv')
+          read -r head_sha head_branch base_branch base_sha state <<< "$pr_state"
+          [[ -n "$head_sha" && -n "$base_sha" && "$base_branch" == dev && "$state" == OPEN ]]
+
+          for attempt in {1..60}; do
+            current_pr=$(gh pr view "$PR_URL" --json headRefOid,headRefName,baseRefName,baseRefOid,state --jq '[.headRefOid, .headRefName, .baseRefName, .baseRefOid, .state] | @tsv')
+            [[ "$current_pr" == "$pr_state" ]] || { echo 'PR head or target changed while waiting for CI' >&2; exit 1; }
+
+            ci_run=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --event pull_request --commit "$head_sha" --branch "$head_branch" --json databaseId,status,conclusion --limit 100 --jq 'sort_by(.databaseId) | last | if . then [.databaseId, .status, .conclusion] | @tsv else empty end')
+            if [[ -z "$ci_run" ]]; then
+              sleep 20
+              continue
+            fi
+            read -r run_id status conclusion <<< "$ci_run"
+
+            case "$status/$conclusion" in
+              completed/success)
+                jobs_passed=$(gh run view "$run_id" --repo "$GITHUB_REPOSITORY" --json jobs --jq 'all(.jobs[]; .status == "completed" and .conclusion == "success") and any(.jobs[]; .name == "verify" and .conclusion == "success") and any(.jobs[]; .name == "checks (ubuntu-latest)" and .conclusion == "success") and any(.jobs[]; .name == "checks (macos-latest)" and .conclusion == "success")')
+                [[ "$jobs_passed" == true ]] || { echo 'CI jobs did not all pass' >&2; exit 1; }
+                [[ "$(gh pr view "$PR_URL" --json headRefOid,headRefName,baseRefName,baseRefOid,state --jq '[.headRefOid, .headRefName, .baseRefName, .baseRefOid, .state] | @tsv')" == "$pr_state" ]] || { echo 'PR changed before merge' >&2; exit 1; }
+                gh pr merge --squash --match-head-commit "$head_sha" "$PR_URL"
+                exit 0
+                ;;
+              completed/*|action_required/*)
+                echo "CI finished without success: $status/$conclusion" >&2
+                exit 1
+                ;;
+            esac
+            sleep 20
+          done
+          echo 'Timed out waiting for pull-request CI' >&2
+          exit 1
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
