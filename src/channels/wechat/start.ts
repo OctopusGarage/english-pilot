@@ -26,6 +26,7 @@ export async function startWeChatChannel(
     log?: (line: string) => void;
     logger?: RuntimeLogger;
     abortSignal?: AbortSignal;
+    onMonitorFailure?: (error: unknown) => void;
   } = {},
 ): Promise<WeChatStartPreview> {
   const report = input.config
@@ -76,6 +77,27 @@ export async function startWeChatChannel(
         log: input.log,
         logger: input.logger,
         abortSignal: input.abortSignal,
+      }).catch((error: unknown) => {
+        if (input.abortSignal?.aborted) return;
+        const message = error instanceof Error ? error.message : String(error);
+        try {
+          input.onMonitorFailure?.(error);
+        } catch {
+          // A reporting callback must not reject the detached monitor task.
+        }
+        try {
+          input.logger?.error('wechat.account.monitor_failed', 'WeChat account monitor failed.', {
+            accountId: account.accountId,
+            error: message,
+          });
+        } catch {
+          // Continue to the other log sink when the runtime log is unavailable.
+        }
+        try {
+          input.log?.(`WeChat account monitor failed for ${account.accountId}: ${message}`);
+        } catch {
+          // The monitor rejection is already handled.
+        }
       });
     }),
   );

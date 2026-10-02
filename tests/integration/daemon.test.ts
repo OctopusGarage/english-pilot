@@ -421,6 +421,46 @@ describe('daemon runtime infrastructure', () => {
     }
   });
 
+  it('waits for a WeChat delivery that takes longer than the status timeout', async () => {
+    const layout = ensureRuntimeLayout();
+    const server = await startControlServer({
+      socketPath: layout.controlSocketPath,
+      getStatus: () => ({
+        ok: true,
+        pid: process.pid,
+        startedAt: '2026-08-14T00:00:00.000Z',
+        channels: { feishu: 'disabled', wechat: 'running' },
+      }),
+      deliverWeChatDailyReview: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 2_200));
+        return {
+          operation: 'wechat-daily-review-daemon-delivery',
+          delivered: true,
+          network: true,
+          accountCount: 1,
+          recipientCount: 1,
+          messagePreview: 'review',
+        };
+      },
+    });
+
+    try {
+      const result = await runCliAsync([
+        'integrations',
+        'deliver',
+        '--target',
+        'wechat',
+        '--date',
+        '2026-08-14',
+        '--json',
+      ]);
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout)).toMatchObject({ delivered: true, network: true });
+    } finally {
+      await server.close();
+    }
+  });
+
   it('supervises configured channel lifecycle state transitions', async () => {
     const layout = ensureRuntimeLayout();
     const logger = createRuntimeLogger(layout.daemonLogPath);
@@ -462,6 +502,57 @@ describe('daemon runtime infrastructure', () => {
     expect(logs).toContain('WeChat channel failed: network unavailable');
     expect(readFileSync(layout.daemonLogPath, 'utf8')).toContain('wechat.channel.failed');
   });
+
+  it.each(['before', 'after'] as const)(
+    'reports a fatal monitor failure through daemon status when it occurs %s startup resolution',
+    async (order) => {
+      const layout = ensureRuntimeLayout();
+      const channels = { feishu: 'disabled' as const, wechat: 'ready' as 'ready' | 'starting' | 'running' | 'failed' };
+      const server = await startControlServer({
+        socketPath: layout.controlSocketPath,
+        getStatus: () => ({ ok: true, pid: 42, startedAt: '2026-10-02T00:00:00.000Z', channels }),
+      });
+      let resolveStartup: (() => void) | undefined;
+      let reportFatal: ((error: unknown) => void) | undefined;
+      try {
+        startConfiguredChannelRuntimes({
+          channels,
+          abortSignal: new AbortController().signal,
+          logger: createRuntimeLogger(layout.daemonLogPath),
+          log: () => undefined,
+          runtimes: [
+            {
+              name: 'wechat',
+              ready: true,
+              start: ({ onFatal }: { onFatal?: (error: unknown) => void }) => {
+                reportFatal = onFatal;
+                return new Promise<void>((resolve) => {
+                  resolveStartup = resolve;
+                });
+              },
+            },
+          ],
+        });
+        const client = createControlClient(layout.controlSocketPath);
+        expect((await client.status()).channels.wechat).toBe('starting');
+
+        if (order === 'before') {
+          reportFatal?.(new Error('monitor stopped'));
+          expect((await client.status()).channels.wechat).toBe('failed');
+        }
+        resolveStartup?.();
+        await Promise.resolve();
+        if (order === 'after') {
+          expect((await client.status()).channels.wechat).toBe('running');
+          reportFatal?.(new Error('monitor stopped'));
+        }
+
+        expect((await client.status()).channels.wechat).toBe('failed');
+      } finally {
+        await server.close();
+      }
+    },
+  );
 
   it('reports service and daemon commands from the CLI', () => {
     const help = runCli(['help']);
