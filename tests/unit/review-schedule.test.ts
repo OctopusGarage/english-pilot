@@ -61,6 +61,19 @@ describe('review schedule helpers', () => {
     ]);
   });
 
+  it('groups stored dates for a very large window without enumerating every day', () => {
+    const groups = buildUpcomingReviewSchedule(
+      [item('past', '2026-09-18'), item('today', '2026-09-19'), item('future', '2026-10-01')],
+      '2026-09-19',
+      1e24,
+    );
+
+    expect(groups.map((group) => [group.date, group.items.map((entry) => entry.id)])).toEqual([
+      ['2026-09-19', ['today']],
+      ['2026-10-01', ['future']],
+    ]);
+  });
+
   it('validates date keys and falls back for invalid positive integer inputs', () => {
     expect(isDateKey('2026-09-19')).toBe(true);
     expect(isDateKey('2026-9-19')).toBe(false);

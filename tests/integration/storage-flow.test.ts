@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runCli } from '../../src/adapters/cli.js';
+import { handleMcpToolCall } from '../../src/adapters/mcp-server.js';
 import {
   cleanupLearningItems,
   listLearningItems,
@@ -375,6 +376,22 @@ describe('local learning storage flow', () => {
         },
       ]),
     });
+  });
+
+  it('returns a large upcoming review window through CLI and MCP without failing', () => {
+    const item = recordLearningItem({
+      original: 'why content not update',
+      suggested: 'Why did the content not update?',
+    });
+    expect(item).toBeDefined();
+    const date = item!.nextReviewAt;
+
+    const cli = runCli(['review', 'upcoming', '--date', date, '--days', '1e24', '--json']);
+    const mcp = handleMcpToolCall('english_review_upcoming', { date, days: 1e24 });
+
+    expect(cli.exitCode).toBe(0);
+    expect(JSON.parse(cli.stdout).groups[0].items[0].id).toBe(item!.id);
+    expect((mcp.groups as Array<{ items: Array<{ id: string }> }>)[0].items[0].id).toBe(item!.id);
   });
 
   it('deduplicates repeated learning items', () => {
