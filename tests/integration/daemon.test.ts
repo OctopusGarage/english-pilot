@@ -463,6 +463,57 @@ describe('daemon runtime infrastructure', () => {
     expect(readFileSync(layout.daemonLogPath, 'utf8')).toContain('wechat.channel.failed');
   });
 
+  it.each(['before', 'after'] as const)(
+    'reports a fatal monitor failure through daemon status when it occurs %s startup resolution',
+    async (order) => {
+      const layout = ensureRuntimeLayout();
+      const channels = { feishu: 'disabled' as const, wechat: 'ready' as 'ready' | 'starting' | 'running' | 'failed' };
+      const server = await startControlServer({
+        socketPath: layout.controlSocketPath,
+        getStatus: () => ({ ok: true, pid: 42, startedAt: '2026-10-02T00:00:00.000Z', channels }),
+      });
+      let resolveStartup: (() => void) | undefined;
+      let reportFatal: ((error: unknown) => void) | undefined;
+      try {
+        startConfiguredChannelRuntimes({
+          channels,
+          abortSignal: new AbortController().signal,
+          logger: createRuntimeLogger(layout.daemonLogPath),
+          log: () => undefined,
+          runtimes: [
+            {
+              name: 'wechat',
+              ready: true,
+              start: ({ onFatal }: { onFatal?: (error: unknown) => void }) => {
+                reportFatal = onFatal;
+                return new Promise<void>((resolve) => {
+                  resolveStartup = resolve;
+                });
+              },
+            },
+          ],
+        });
+        const client = createControlClient(layout.controlSocketPath);
+        expect((await client.status()).channels.wechat).toBe('starting');
+
+        if (order === 'before') {
+          reportFatal?.(new Error('monitor stopped'));
+          expect((await client.status()).channels.wechat).toBe('failed');
+        }
+        resolveStartup?.();
+        await Promise.resolve();
+        if (order === 'after') {
+          expect((await client.status()).channels.wechat).toBe('running');
+          reportFatal?.(new Error('monitor stopped'));
+        }
+
+        expect((await client.status()).channels.wechat).toBe('failed');
+      } finally {
+        await server.close();
+      }
+    },
+  );
+
   it('reports service and daemon commands from the CLI', () => {
     const help = runCli(['help']);
     const dryRun = runCli(['service', 'install', '--dry-run', '--json']);

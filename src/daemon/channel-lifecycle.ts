@@ -10,7 +10,12 @@ export type DaemonChannelStates = Record<DaemonChannelName, ChannelRuntimeState>
 export interface DaemonChannelRuntime {
   name: DaemonChannelName;
   ready: boolean;
-  start: (input: { log: (line: string) => void; logger: RuntimeLogger; abortSignal: AbortSignal }) => Promise<unknown>;
+  start: (input: {
+    log: (line: string) => void;
+    logger: RuntimeLogger;
+    abortSignal: AbortSignal;
+    onFatal: (error: unknown) => void;
+  }) => Promise<unknown>;
 }
 
 export interface ChannelLifecycleSupervisorInput {
@@ -34,7 +39,8 @@ export function defaultDaemonChannelRuntimes(input: {
     {
       name: 'wechat',
       ready: input.wechatReady,
-      start: ({ log, logger, abortSignal }) => startWeChatChannel({ log, logger, abortSignal }),
+      start: ({ log, logger, abortSignal, onFatal }) =>
+        startWeChatChannel({ log, logger, abortSignal, onMonitorFailure: onFatal }),
     },
   ];
 }
@@ -44,24 +50,36 @@ export function startConfiguredChannelRuntimes(input: ChannelLifecycleSupervisor
     if (!runtime.ready) continue;
     input.channels[runtime.name] = 'starting';
     input.logger.info(`${runtime.name}.channel.starting`, `${labelChannel(runtime.name)} channel is starting.`);
+    const fail = (error: unknown): void => {
+      if (input.abortSignal.aborted) return;
+      input.channels[runtime.name] = 'failed';
+      const message = error instanceof Error ? error.message : String(error);
+      try {
+        input.logger.error(`${runtime.name}.channel.failed`, `${labelChannel(runtime.name)} channel failed.`, {
+          error: message,
+        });
+      } catch {
+        // Failure reporting must not reject a detached channel task.
+      }
+      try {
+        input.log(`${labelChannel(runtime.name)} channel failed: ${message}`);
+      } catch {
+        // Keep the failed state even when the caller's log sink is unavailable.
+      }
+    };
     void runtime
       .start({
         log: input.log,
         logger: input.logger,
         abortSignal: input.abortSignal,
+        onFatal: fail,
       })
       .then(() => {
+        if (input.abortSignal.aborted || input.channels[runtime.name] === 'failed') return;
         input.channels[runtime.name] = 'running';
         input.logger.info(`${runtime.name}.channel.running`, `${labelChannel(runtime.name)} channel is running.`);
       })
-      .catch((error) => {
-        input.channels[runtime.name] = 'failed';
-        const message = error instanceof Error ? error.message : String(error);
-        input.logger.error(`${runtime.name}.channel.failed`, `${labelChannel(runtime.name)} channel failed.`, {
-          error: message,
-        });
-        input.log(`${labelChannel(runtime.name)} channel failed: ${message}`);
-      });
+      .catch(fail);
   }
 }
 

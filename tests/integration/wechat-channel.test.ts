@@ -42,6 +42,7 @@ describe('WeChat long-connection channel', () => {
     const account = saveWeChatAccount({ accountId: 'bot-im-bot', token: 'secret-token' });
     mkdirSync(join(getWeChatAccountsDir(), 'bot-im-bot.context-tokens.json'));
     const logs: string[] = [];
+    const failures: unknown[] = [];
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async (url) =>
       jsonResponse(
@@ -68,9 +69,11 @@ describe('WeChat long-connection channel', () => {
           botAgent: 'EnglishPilot/test',
         },
         log: (line) => logs.push(line),
+        onMonitorFailure: (error) => failures.push(error),
       });
       await new Promise((resolve) => setTimeout(resolve, 20));
       expect(logs.some((line) => line.includes('WeChat account monitor failed for bot-im-bot'))).toBe(true);
+      expect(failures).toEqual([expect.objectContaining({ code: 'EISDIR' })]);
     } finally {
       globalThis.fetch = originalFetch;
     }
