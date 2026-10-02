@@ -69,6 +69,13 @@ describe('review schedule helpers', () => {
     expect(parsePositiveInteger('1.5', 7)).toBe(7);
     expect(parsePositiveInteger(undefined, 7)).toBe(7);
   });
+
+  it('rejects calendar-invalid dates while accepting a leap day', () => {
+    expect(isDateKey('2026-02-30')).toBe(false);
+    expect(isDateKey('2025-02-29')).toBe(false);
+    expect(isDateKey('2026-13-01')).toBe(false);
+    expect(isDateKey('2024-02-29')).toBe(true);
+  });
 });
 
 function item(id: string, nextReviewAt: string): { id: string; nextReviewAt: string } {
