@@ -421,6 +421,46 @@ describe('daemon runtime infrastructure', () => {
     }
   });
 
+  it('waits for a WeChat delivery that takes longer than the status timeout', async () => {
+    const layout = ensureRuntimeLayout();
+    const server = await startControlServer({
+      socketPath: layout.controlSocketPath,
+      getStatus: () => ({
+        ok: true,
+        pid: process.pid,
+        startedAt: '2026-08-14T00:00:00.000Z',
+        channels: { feishu: 'disabled', wechat: 'running' },
+      }),
+      deliverWeChatDailyReview: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 2_200));
+        return {
+          operation: 'wechat-daily-review-daemon-delivery',
+          delivered: true,
+          network: true,
+          accountCount: 1,
+          recipientCount: 1,
+          messagePreview: 'review',
+        };
+      },
+    });
+
+    try {
+      const result = await runCliAsync([
+        'integrations',
+        'deliver',
+        '--target',
+        'wechat',
+        '--date',
+        '2026-08-14',
+        '--json',
+      ]);
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout)).toMatchObject({ delivered: true, network: true });
+    } finally {
+      await server.close();
+    }
+  });
+
   it('supervises configured channel lifecycle state transitions', async () => {
     const layout = ensureRuntimeLayout();
     const logger = createRuntimeLogger(layout.daemonLogPath);

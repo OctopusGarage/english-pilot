@@ -17,6 +17,7 @@ export interface ControlClientOptions {
 }
 
 const DEFAULT_CONTROL_REQUEST_TIMEOUT_MS = 2_000;
+const WECHAT_DELIVERY_TIMEOUT_MS = 60_000;
 
 export function createControlClient(socketPath: string, options: ControlClientOptions = {}): ControlClient {
   return {
@@ -29,7 +30,7 @@ export function createControlClient(socketPath: string, options: ControlClientOp
       const result = await request(
         socketPath,
         { id: requestId(), method: 'wechat.dailyReview.deliver', payload },
-        options,
+        { timeoutMs: options.timeoutMs ?? WECHAT_DELIVERY_TIMEOUT_MS },
       );
       if ('ok' in result) throw new Error('Daemon returned an invalid WeChat delivery response.');
       return result;
