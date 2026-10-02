@@ -76,6 +76,13 @@ export async function startWeChatChannel(
         log: input.log,
         logger: input.logger,
         abortSignal: input.abortSignal,
+      }).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        input.logger?.error('wechat.account.monitor_failed', 'WeChat account monitor failed.', {
+          accountId: account.accountId,
+          error: message,
+        });
+        input.log?.(`WeChat account monitor failed for ${account.accountId}: ${message}`);
       });
     }),
   );

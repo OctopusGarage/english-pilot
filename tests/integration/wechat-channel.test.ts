@@ -7,7 +7,7 @@ import { getWeChatUpdates, sendWeChatMessage } from '../../src/channels/wechat/a
 import { loadWeChatChannelConfig } from '../../src/channels/wechat/config.js';
 import { monitorWeChatTextMessage } from '../../src/channels/wechat/monitor.js';
 import { runWeChatOnboarding } from '../../src/channels/wechat/onboarding.js';
-import { handleWeChatMessage, monitorWeChatAccount } from '../../src/channels/wechat/start.js';
+import { handleWeChatMessage, monitorWeChatAccount, startWeChatChannel } from '../../src/channels/wechat/start.js';
 import {
   getWeChatAccountsDir,
   listWeChatAccounts,
@@ -36,6 +36,44 @@ describe('WeChat long-connection channel', () => {
       process.env.ENGLISH_PILOT_HOME = previousHome;
     }
     rmSync(home, { recursive: true, force: true });
+  });
+
+  it('reports a fatal account monitor error instead of leaving its rejection unhandled', async () => {
+    const account = saveWeChatAccount({ accountId: 'bot-im-bot', token: 'secret-token' });
+    mkdirSync(join(getWeChatAccountsDir(), 'bot-im-bot.context-tokens.json'));
+    const logs: string[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url) =>
+      jsonResponse(
+        String(url).includes('getupdates')
+          ? {
+              ret: 0,
+              msgs: [
+                {
+                  message_id: 'message-1',
+                  from_user_id: 'allowed-user',
+                  context_token: 'context-token',
+                  item_list: [{ type: 1, text_item: { text: 'Hello' } }],
+                },
+              ],
+            }
+          : {},
+      );
+    try {
+      await startWeChatChannel({
+        config: {
+          accounts: [account],
+          allowedUsers: new Set(['allowed-user']),
+          replyMode: 'silent',
+          botAgent: 'EnglishPilot/test',
+        },
+        log: (line) => logs.push(line),
+      });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(logs.some((line) => line.includes('WeChat account monitor failed for bot-im-bot'))).toBe(true);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it('enforces the long-poll timeout when the daemon supplies an abort signal', async () => {
