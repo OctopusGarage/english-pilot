@@ -146,6 +146,39 @@ describe('WeChat long-connection channel', () => {
     });
   });
 
+  it('redacts saved account tokens from WeChat doctor JSON while reporting readiness', () => {
+    const token = 'fake-wechat-token-for-doctor-test';
+    saveWeChatAccount({ accountId: 'bot-im-bot', token, userId: 'wxid_owner@im.wechat' });
+
+    const result = runCli(['wechat', 'doctor', '--json']);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout).not.toContain(token);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      ok: true,
+      missing: [],
+      config: {
+        accounts: [{ accountId: 'bot-im-bot', token: '***', userId: 'wxid_owner@im.wechat' }],
+      },
+    });
+  });
+
+  it('lists WeChat account metadata without exposing saved tokens', () => {
+    const token = 'fake-wechat-token-for-accounts-test';
+    saveWeChatAccount({ accountId: 'bot-im-bot', token, userId: 'wxid_owner@im.wechat' });
+
+    const result = runCli(['wechat', 'accounts', '--json']);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout).not.toContain(token);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      accounts: [{ accountId: 'bot-im-bot', userId: 'wxid_owner@im.wechat' }],
+    });
+    expect(JSON.parse(result.stdout).accounts[0]).not.toHaveProperty('token');
+  });
+
   it('stores QR-login accounts with private file permissions after redirect confirmation', async () => {
     const logs: string[] = [];
     const calls: string[] = [];
