@@ -102,6 +102,9 @@ export function runReview(args: string[]): CliResult {
     };
   }
 
+  const unknown = args.find((arg) => arg !== '--json');
+  if (unknown) return { exitCode: 1, stdout: '', stderr: `Unknown review command: ${unknown}\n` };
+
   const items = listLearningItems();
   return {
     exitCode: 0,
