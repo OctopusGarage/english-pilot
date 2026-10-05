@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AnalysisResult, PolicyDecision } from '../core/types.js';
 import { getEnglishPilotHome, loadConfig } from '../core/config.js';
@@ -476,8 +476,7 @@ function ensureSchema(db: DatabaseSyncLike): void {
 
 function appendJsonLine(path: string, value: unknown): void {
   ensureRuntimeHome();
-  const existing = existsSync(path) ? readFileSync(path, 'utf8') : '';
-  writeFileSync(path, `${existing}${JSON.stringify(value)}\n`, { encoding: 'utf8', mode: 0o600 });
+  appendFileSync(path, `${JSON.stringify(value)}\n`, { encoding: 'utf8', mode: 0o600 });
   chmodSync(path, 0o600);
 }
 
