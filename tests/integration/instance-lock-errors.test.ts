@@ -133,6 +133,24 @@ it('cleans the private file when a published live owner rejects contention', () 
   expect(fs.readdirSync(home)).toEqual(['.instance.lock']);
 });
 
+it('retains an existing lock when its process is alive but cannot be signaled', () => {
+  const ownerPid = 42;
+  const record = JSON.stringify({ pid: ownerPid });
+  fs.writeFileSync(path, record);
+  const inode = fs.statSync(path).ino;
+  const kill = vi.spyOn(process, 'kill').mockImplementationOnce(() => {
+    throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
+  });
+  try {
+    expect(() => createInstanceLock(path).acquire()).toThrow(InstanceLockHeldError);
+    expect(fs.readFileSync(path, 'utf8')).toBe(record);
+    expect(fs.statSync(path).ino).toBe(inode);
+    expect(fs.readdirSync(home)).toEqual(['.instance.lock']);
+  } finally {
+    kill.mockRestore();
+  }
+});
+
 it('does not remove an unowned temporary path when exclusive private creation fails', () => {
   const failure = Object.assign(new Error('private open failed'), { code: 'EEXIST' });
   vi.mocked(fs.openSync).mockImplementationOnce((temporary) => {
