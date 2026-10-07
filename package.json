@@ -105,7 +105,8 @@
   },
   "pnpm": {
     "overrides": {
-      "typed-rest-client>qs": "^6.16.0"
+      "typed-rest-client>qs": "^6.16.0",
+      "source-map-js": "^1.2.2"
     }
   }
 }
