@@ -50,7 +50,7 @@ describe('Dependabot auto-merge workflow', () => {
   it('locks the MCP SDK at the audited safe release', () => {
     const lockfile = parse(readFileSync(join(root, 'pnpm-lock.yaml'), 'utf8')) as PnpmLock;
 
-    expect(Object.keys(lockfile.snapshots).some((key) => key.startsWith('@modelcontextprotocol/sdk@1.31.0'))).toBe(
+    expect(Object.keys(lockfile.snapshots).some((key) => key.startsWith('@modelcontextprotocol/sdk@1.32.1'))).toBe(
       true,
     );
   });
