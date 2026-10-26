@@ -1,5 +1,21 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import type { McpToolDefinition } from './mcp-tool-types.js';
+
+// Reject malformed arrays before Zod allocates an issue for every element.
+// Keep valid arrays unbounded and retain the published array-of-strings schema.
+const tagsSchema = z
+  .preprocess((value, context) => {
+    if (Array.isArray(value)) {
+      for (const tag of value) {
+        if (typeof tag !== 'string') {
+          context.addIssue({ code: 'custom', message: 'Expected an array of string tags' });
+          return z.NEVER;
+        }
+      }
+    }
+    return value;
+  }, z.array(z.string()))
+  .optional();
 
 export const learningMcpToolDefinitions = [
   {
@@ -46,7 +62,7 @@ export const learningMcpToolDefinitions = [
       original: z.string(),
       suggested: z.string(),
       scene: z.string().optional(),
-      tags: z.array(z.string()).optional(),
+      tags: tagsSchema,
     },
     mode: 'sync',
   },
@@ -135,7 +151,7 @@ export const learningMcpToolDefinitions = [
       from: z.string().optional(),
       to: z.string().optional(),
       tag: z.string().optional(),
-      tags: z.array(z.string()).optional(),
+      tags: tagsSchema,
       dueOnly: z.boolean().optional(),
       limit: z.number().int().positive().optional(),
     },
@@ -175,7 +191,7 @@ export const learningMcpToolDefinitions = [
       suggested: z.string().optional(),
       scene: z.string().optional(),
       pattern: z.string().optional(),
-      tags: z.array(z.string()).optional(),
+      tags: tagsSchema,
     },
     mode: 'sync',
   },
