@@ -90,6 +90,7 @@
     "prettier": "^3.9.4",
     "typescript": "^5.5.0",
     "typescript-eslint": "^8.63.0",
+    "vite": "^8.3.5",
     "vitest": "^4.1.10",
     "yaml": "^2.9.0"
   },
@@ -97,7 +98,7 @@
     "@larksuiteoapi/node-sdk": "^1.70.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "qrcode-terminal": "^0.12.0",
-    "zod": "^3.25.76"
+    "zod": "^4.6.7"
   },
   "overrides": {
     "axios": "^1.17.0",
