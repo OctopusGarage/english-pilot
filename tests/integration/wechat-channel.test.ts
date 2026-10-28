@@ -675,7 +675,7 @@ describe('WeChat long-connection channel', () => {
     const failed = await run('Continue the expired WeChat context.');
     const recovered = await run('Try this WeChat message again.');
 
-    expect(failed).toMatchObject({ handled: true, replied: false, reason: 'agent-failed' });
+    expect(failed).toMatchObject({ handled: true, replied: true, reason: 'agent-failed' });
     expect(recovered).toMatchObject({ handled: true, replied: true });
     expect(threadIds).toEqual([undefined, 'codex-thread-wechat', undefined]);
   });

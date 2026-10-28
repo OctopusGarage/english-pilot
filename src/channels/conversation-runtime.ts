@@ -1,5 +1,5 @@
 import { runExternalAgent } from '../agent/runner.js';
-import { runExternalChannelAgentTurn } from '../agent/channel-turn.js';
+import { runExternalChannelAgentTurn, type ExternalChannelAgentTurnResult } from '../agent/channel-turn.js';
 import { clearAgentSession } from '../agent/session-store.js';
 import { extractLastAssistantEnglishNote } from '../core/assistant-note.js';
 import { loadConfig } from '../core/config.js';
@@ -75,25 +75,34 @@ async function handleAllowedChannelMessage(
 ): Promise<ExternalChannelConversationResult> {
   await sendProcessingAck(input);
 
-  const agentReply = await runExternalChannelAgentTurn({
-    channel: input.channel,
-    scope: input.scope,
-    text: input.text,
-    metadata: {
-      ...input.metadata,
-      inputKind: input.inputKind,
-      thresholdDecision: 'ALLOW',
-    },
-    coachingInstruction: monitorResult.agentCoachingInstruction,
-    runAgent: input.runAgent,
-    log: input.log,
-    logger: input.logger,
-    failureLabel: `${labelChannel(input.channel)} external agent for ${input.messageLabel}`,
-  });
+  let agentReply: ExternalChannelAgentTurnResult;
+  try {
+    agentReply = await runExternalChannelAgentTurn({
+      channel: input.channel,
+      scope: input.scope,
+      text: input.text,
+      metadata: {
+        ...input.metadata,
+        inputKind: input.inputKind,
+        thresholdDecision: 'ALLOW',
+      },
+      coachingInstruction: monitorResult.agentCoachingInstruction,
+      runAgent: input.runAgent,
+      log: input.log,
+      logger: input.logger,
+      failureLabel: `${labelChannel(input.channel)} external agent for ${input.messageLabel}`,
+    });
+  } catch (error) {
+    input.logger?.warn('channel.agent.exception', 'External channel agent threw an exception.', {
+      ...logContext(input),
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return sendAgentFailureReply(input);
+  }
 
-  if (agentReply.failed) {
+  if (agentReply.failed || (agentReply.runResult && !agentReply.text)) {
     input.logger?.warn('channel.agent.failed', 'External channel agent failed to produce a reply.', logContext(input));
-    return { handled: true, replied: false, reason: 'agent-failed' };
+    return sendAgentFailureReply(input);
   }
   if (!agentReply.text) {
     return handleSkippedReply(input);
@@ -102,6 +111,17 @@ async function handleAllowedChannelMessage(
   recordAssistantNoteFromReply(input, agentReply.text);
   const sent = await sendChannelReply(input, agentReply.text, 'agent reply');
   return { handled: true, replied: sent.sent };
+}
+
+async function sendAgentFailureReply(
+  input: ExternalChannelConversationInput,
+): Promise<ExternalChannelConversationResult> {
+  const sent = await sendChannelReply(
+    input,
+    'I could not complete your request. Please try again. If this keeps happening, send /new to start a new conversation.',
+    'agent failure',
+  );
+  return { handled: true, replied: sent.sent, reason: 'agent-failed' };
 }
 
 async function handleBlockedOrSkippedChannelMessage(

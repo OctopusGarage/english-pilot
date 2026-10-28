@@ -40,7 +40,7 @@ export async function runExternalChannelAgentTurn(
   }
 
   const cwd = config.externalAgentCwd.trim() || process.cwd();
-  const turn = trackAgentSessionTurn(input.scope);
+  let turn = trackAgentSessionTurn(input.scope);
   try {
     const session = getAgentSession(input.scope, config.externalAgentBackend, cwd);
     const prompt = buildExternalChannelAgentPrompt({
@@ -56,13 +56,40 @@ export async function runExternalChannelAgentTurn(
       cwd,
       hasSession: Boolean(session),
     });
-    const result = await (input.runAgent ?? runExternalAgent)({
+    const runOptions = {
       config,
       prompt,
       cwd,
       ...(config.externalAgentBackend === 'claude' ? { sessionId: session?.sessionId } : {}),
       ...(config.externalAgentBackend === 'codex' ? { threadId: session?.threadId } : {}),
-    });
+    };
+    const runAgent = input.runAgent ?? runExternalAgent;
+    let result = await runAgent(runOptions);
+
+    if (
+      session?.sessionId &&
+      result.backend === 'claude' &&
+      result.exitCode === 1 &&
+      result.stderr
+        .split(/\r?\n/)
+        .some((line) => line.trim() === `No conversation found with session ID: ${session.sessionId}`) &&
+      turn.isCurrent()
+    ) {
+      turn.finish();
+      clearAgentSession(input.scope);
+      turn = trackAgentSessionTurn(input.scope);
+      input.logger?.info(
+        'external_agent.session_recovery',
+        'Claude session is missing; retrying once with a new session.',
+        {
+          channel: input.channel,
+          scope: input.scope,
+          backend: result.backend,
+          cwd,
+        },
+      );
+      result = await runAgent({ ...runOptions, sessionId: undefined });
+    }
 
     if (result.exitCode !== 0) {
       if (session && turn.isCurrent()) clearAgentSession(input.scope);

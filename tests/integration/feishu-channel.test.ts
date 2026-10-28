@@ -467,8 +467,8 @@ describe('Feishu long-connection channel', () => {
         stderr: outcome === 'error' ? 'agent failed' : '',
       });
     const completed = await pendingOutcome;
-    if (outcome === 'throw') expect(completed).toHaveProperty('error.message', 'runner rejected');
-    else expect(completed).toHaveProperty('value.replied', outcome === 'success');
+    expect(completed).toHaveProperty('value.replied', true);
+    if (outcome !== 'success') expect(completed).toHaveProperty('value.reason', 'agent-failed');
     const expected =
       change === 'unrelated-reset'
         ? outcome === 'error'
